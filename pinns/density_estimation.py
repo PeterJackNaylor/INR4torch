@@ -183,9 +183,9 @@ class DensityEstimator:
             if "temporal_causality" in self.hp["losses"][key]:
                 if self.hp["losses"][key]["temporal_causality"]:
                     M = self.hp.temporal_causality["M"]
-                    self.temporal_weights[key] = [torch.ones(M, device=self.device)]
-        self.M = M
-        self.eps = self.hp.temporal_causality["eps"]
+                    self.temporal_weights[key] = [torch.ones(M, requires_grad=False, device=self.device)]
+                self.M = M
+                self.eps = self.hp.temporal_causality["eps"]
 
     def temporal_loss(self, key, residue_computation, bs_loss):
         def f(z, zhat):
@@ -193,8 +193,10 @@ class DensityEstimator:
             square_res = residue.reshape(bs_loss // self.M, self.M)
             M_losses = Norm2(square_res, dim=0)
             shifted_M_loss = torch.zeros_like(M_losses)
+
             shifted_M_loss[1:] = M_losses[:-1]
             w_i = torch.exp(-self.eps * torch.cumsum(shifted_M_loss, dim=0)).detach()
+            w_i.requires_grad_(False)
             self.temporal_weights[key].append(w_i)
             loss = torch.mean(w_i * M_losses)
             return loss

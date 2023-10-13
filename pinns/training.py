@@ -40,7 +40,7 @@ def train(
         hp.B = np.array(hp.B.cpu())
     if hp.save_model:
         np.savez(
-            hp.npz_name + ".npz",
+            hp.npz_name,
             **hp,
         )
 

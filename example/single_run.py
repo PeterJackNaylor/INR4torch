@@ -28,6 +28,10 @@ tt = NN.test_set.t
 predictions = NN.test_loop()
 predictions = predictions.reshape((tt.shape[0], xx.shape[0])).T
 gt = NN.test_set.targets.reshape((tt.shape[0], xx.shape[0])).T
+
+if gpu:
+    predictions = predictions.cpu()
+    gt = gt.cpu()
 plt.imshow(predictions, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto")
 plt.savefig("plots/predictions.png")
 plt.close()
@@ -70,7 +74,7 @@ except:
 for key in NN.temporal_weights.keys():
     try:
         t_weights = torch.column_stack(NN.temporal_weights[key])
-        if NN.device == "gpu":
+        if gpu:
             t_weights = t_weights.cpu()
         for k in range(t_weights.shape[0]):
             plt.plot(t_weights[k], label=f"w_{k}")

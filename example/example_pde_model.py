@@ -17,7 +17,7 @@ def advection_residue(model, x, t, c=1):
 
 def soft_periodicity(model, t):
     x_0 = torch.zeros_like(t)
-    residue = model(x_0, t) - model(x_0 + 2 * torch.pi, t)
+    residue = model(x_0 - 1, t) - model(x_0 + 1, t)
     return residue
 
 

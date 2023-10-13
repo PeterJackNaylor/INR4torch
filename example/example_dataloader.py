@@ -4,7 +4,11 @@ import pinns
 
 
 def return_dataset(hp, gpu=True):
-    data_train = XT(hp, nv_samples=None, nv_targets=None, test=False, gpu=gpu)
+    data_train = XT(hp,
+                    nv_samples=None,
+                    nv_targets=None,
+                    test=False,
+                    gpu=gpu)
     data_test = XT(
         hp,
         nv_samples=data_train.nv_samples,
