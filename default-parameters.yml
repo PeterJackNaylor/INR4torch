@@ -1,0 +1,88 @@
+#training
+epochs: 2000 #180 #00
+normalise_targets: True
+test_frequency: 500
+save_model: True
+
+
+#Models
+model:
+  name: SIREN #or RFF/siren/wires
+  hidden_nlayers: 4
+  hidden_width: 256
+  scale: 10
+  skip: False
+  ## RFF specific
+  mapping_size: 512
+  activation: tanh
+
+
+# Lambda values in the loss
+validation_loss: mse
+losses:
+  mse:
+    report: True
+    bs: 64
+  # mae:
+  #   report: False
+  #   lambda: 1.e-1
+  pde:
+    report: True
+    log: True
+    lambda: 1.e-1
+    temporal_causality: True
+    bs: 16384 # 8192 # 16384 # powers of 2 only
+    method: pde
+  periodicity:
+    report: False
+    lambda: 1.e-1
+    temporal_causality: True
+    bs: 16384 # powers of 2 only
+    method: periodicity
+
+# learning schemes
+temporal_causality:
+  M: 512 # powers of 2 only
+  eps: 1.e-1
+  step: 40 #update
+
+
+# Loss balancing
+relobralo:
+  status: False
+  T: 1.
+  alpha: 0.999
+  rho: 0.5
+  f: 10
+
+self_adapting_loss_balancing:
+  status: True
+  alpha: 0.9
+  step: 100 #update
+
+
+early_stopping: # not implemented
+  status: False
+  patience: 15
+
+# optimizers
+lr: 1.e-3
+eps: 1.e-8 #adam precision
+clip_gradients: True
+
+# schedulers
+learning_rate_decay:
+  status: False
+  step: 500
+  gamma: 0.1
+
+cosine_anealing:
+  status: True
+  min_eta: 0
+  step: 500
+
+#gradient schemes
+autograd:
+  status: False
+  step_t: 1000 #in sec
+  step_x: 10 #in km
