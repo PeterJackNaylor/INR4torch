@@ -1,6 +1,7 @@
 import torch
 import pinns
 
+pi = 3.141592653589793238462643383279502884197
 
 def advection_residue(model, x, t, c=1):
     torch.set_grad_enabled(True)
@@ -11,7 +12,10 @@ def advection_residue(model, x, t, c=1):
     du_dx = pinns.gradient(u, x)
     du_dt = pinns.gradient(u, t)
 
-    residue = du_dt + c * du_dx
+    # the pi is essential as we derive with respect to x_tilde
+    # and not x, so chaining rule implies we had the scaling
+    # factor between x and x_tilde, which is 3.
+    residue = du_dt + c / pi  * du_dx
     return residue
 
 

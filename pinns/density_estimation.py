@@ -184,8 +184,8 @@ class DensityEstimator:
                 if self.hp["losses"][key]["temporal_causality"]:
                     M = self.hp.temporal_causality["M"]
                     self.temporal_weights[key] = [torch.ones(M, requires_grad=False, device=self.device)]
-                self.M = M
-                self.eps = self.hp.temporal_causality["eps"]
+                    self.M = M
+                    self.eps = self.hp.temporal_causality["eps"]
 
     def temporal_loss(self, key, residue_computation, bs_loss):
         def f(z, zhat):
@@ -204,7 +204,6 @@ class DensityEstimator:
         return f
 
     def compute_loss(self, z, zhat):
-
         for key in self.hp.losses.keys():
             self.loss_values[key].append(self.loss_fn[key](z, zhat))
 
@@ -213,6 +212,7 @@ class DensityEstimator:
             residue = residue_computation(z, zhat).flatten()
             loss = Norm2(residue) / (residue.shape[0]) ** 0.5
             return loss
+        return f
 
     def range(self, start, end, step, leave=True):
         iterator_fn = trange if self.hp.verbose else range
@@ -293,7 +293,7 @@ class DensityEstimator:
                 r_loss = self.loss_values[key][-1].item()
                 if "log" in self.hp["losses"][key]:
                     if self.hp["losses"][key]["log"]:
-                        r_loss = np.log(r_loss)
+                        r_loss = np.log(r_loss + 1e-15)
                 text += f" Loss {key.upper()}: {r_loss:.4f}"
         train_iterator.set_description(text)
 
@@ -319,7 +319,7 @@ class DensityEstimator:
             predictions, self.test_set.targets[: predictions.shape[0]]
         ).item()
         if self.hp.verbose:
-            print(f"Test Error: Avg loss: {test_loss:>4f}")
+            print(f"Test Error: {test_loss:>4f}")
         return test_loss
 
     def test_and_maybe_save(self, best_test_score):
@@ -374,7 +374,6 @@ class DensityEstimator:
 
             self.compute_loss(true_pred, target_pred)
             self.loss_balancing()
-
             loss = sum_loss(self.loss_values, self.lambdas_scalar)
             loss.backward()
             self.clip_gradients()

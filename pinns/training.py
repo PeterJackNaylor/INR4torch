@@ -1,7 +1,7 @@
 import numpy as np
 
 # from .data_XYTZ import return_dataset
-from .models import ReturnModel, gen_b
+from .models import gen_b
 
 # from .util_train import estimate_density
 
@@ -9,7 +9,7 @@ from .models import ReturnModel, gen_b
 
 
 def train(
-    hp, estimate_density_cl, dataset_fn, trial=None, return_model=True, gpu=False
+    hp, estimate_density_cl, dataset_fn, model_cl, trial=None, gpu=False
 ):
 
     train, test = dataset_fn(hp, gpu=gpu)
@@ -24,7 +24,8 @@ def train(
             hp.model["mapping_size"], hp.model["scale"], hp.input_size, gpu=gpu
         )
 
-    model = ReturnModel(
+    model = model_cl(
+        hp.model["name"],
         hp.input_size,
         output_size=hp.output_size,
         hp=hp,

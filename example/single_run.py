@@ -4,6 +4,7 @@ import pinns
 from generate_data import get_dataset
 from example_dataloader import return_dataset
 from example_pde_model import Advection
+from example_model import return_model_advection as model
 import matplotlib.pylab as plt
 
 c = 10
@@ -21,23 +22,43 @@ model_hp.verbose = True
 model_hp.pth_name = "test.pth"
 model_hp.npz_name = "test.npz"
 
-NN, model_hp = pinns.train(model_hp, Advection, return_dataset, gpu=gpu)
+NN, model_hp = pinns.train(model_hp, Advection, return_dataset, model(model_hp.hard_periodicity), gpu=gpu)
 
 xx = NN.test_set.x
 tt = NN.test_set.t
 predictions = NN.test_loop()
-predictions = predictions.reshape((tt.shape[0], xx.shape[0])).T
-gt = NN.test_set.targets.reshape((tt.shape[0], xx.shape[0])).T
-
 if gpu:
     predictions = predictions.cpu()
-    gt = gt.cpu()
-plt.imshow(predictions, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto")
+predictions = predictions.reshape((xx.shape[0], tt.shape[0])).numpy()
+
+gt = real_u
+
+score = np.linalg.norm(gt - predictions) / np.linalg.norm(gt)
+
+
+print("##########################")
+print("#   Relative L2 error:   #")
+print("#                        #")
+print(f"#        {score:.6f}        #")
+print("#                        #")
+print("##########################")
+
+
+
+
+im = plt.imshow(predictions, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+plt.colorbar(im)
 plt.savefig("plots/predictions.png")
 plt.close()
 
-plt.imshow(gt, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto")
+im = plt.imshow(gt, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+plt.colorbar(im)
 plt.savefig("plots/ground_truth.png")
+plt.close()
+
+im = plt.imshow(np.abs(gt-predictions), extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+plt.colorbar(im)
+plt.savefig("plots/absolute_error.png")
 plt.close()
 
 plt.plot(predictions[:, 0])
@@ -47,6 +68,7 @@ plt.close()
 plt.plot(gt[:, 0])
 plt.savefig("plots/ground_truth_time_0.png")
 plt.close()
+
 
 for k in NN.loss_values.keys():
     try:
@@ -70,7 +92,6 @@ try:
     plt.close()
 except:
     print("Couldn't plot lambdas_scalar")
-
 for key in NN.temporal_weights.keys():
     try:
         t_weights = torch.column_stack(NN.temporal_weights[key])
@@ -83,3 +104,5 @@ for key in NN.temporal_weights.keys():
         plt.close()
     except:
         print(f"Couldn't plot t_weights for {key}")
+
+import pdb; pdb.set_trace()

@@ -16,6 +16,9 @@ def return_dataset(hp, gpu=True):
         test=True,
         gpu=gpu,
     )
+    if hp.hard_periodicity:
+        data_train.input_size = 2 * data_train.input_size
+        data_test.input_size = 2 * data_test.input_size
     return data_train, data_test
 
 
@@ -32,10 +35,8 @@ class XT(pinns.DataPlaceholder):
         self.t = t
         self.x = x
         if test:
-            xx, tt = np.meshgrid(
-                x,
-                t,
-            )
+            tt, xx = np.meshgrid(t, x)
+            xx = np.flip(xx, axis=0)
             samples = np.vstack([xx.ravel(), tt.ravel()]).T
             targets = u.ravel().reshape(samples.shape[0], 1)
         else:
