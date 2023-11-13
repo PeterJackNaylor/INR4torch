@@ -7,28 +7,29 @@ import optuna
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
-import collections
+
+# import collections
 
 
-def skip_first(it):
-    """
-    Skip the first element of an Iterator or Iterable,
-    like a Generator or a list.
-    This will always return a generator or raise TypeError()
-    in case the argument's type is not compatible
-    """
-    if isinstance(it, collections.Iterator):
-        try:
-            next(it)
-            yield from it
-        except StopIteration:
-            return
-    elif isinstance(it, collections.Iterable):
-        yield from skip_first(it.__iter__())
-    else:
-        raise TypeError(
-            f"You must pass an Iterator or an Iterable to skip_first(), but you passed {it}"
-        )
+# def skip_first(it):
+#     """
+#     Skip the first element of an Iterator or Iterable,
+#     like a Generator or a list.
+#     This will always return a generator or raise TypeError()
+#     in case the argument's type is not compatible
+#     """
+#     if isinstance(it, collections.Iterator):
+#         try:
+#             next(it)
+#             yield from it
+#         except StopIteration:
+#             return
+#     elif isinstance(it, collections.Iterable):
+#         yield from skip_first(it.__iter__())
+#     else:
+#         raise TypeError(
+#             f"You must pass an Iterator or an Iterable to skip_first(), but you passed {it}"
+#         )
 
 
 def Norm1(vector, dim=None):
