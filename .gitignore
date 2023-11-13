@@ -211,5 +211,5 @@ pinns/__pycache__
 example/plots
 example/*.npz
 example/*.pth
-
+example/multiple/
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,visualstudiocode
