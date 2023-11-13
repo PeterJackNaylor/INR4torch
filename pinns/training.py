@@ -5,7 +5,7 @@ from .models import gen_b
 
 # from .util_train import estimate_density
 
-# import torch
+
 
 
 def train(
@@ -33,9 +33,12 @@ def train(
 
     if gpu:
         model = model.cuda()
-
+    # import torch
+    # model = torch.compile(model)
     NN = estimate_density_cl(train, test, model, hp, gpu, trial=trial)
+    # with torch.profiler.profile():
     NN.fit()
+    # torch.profiler.export_chrome_trace('profile.json')
 
     if "B" in hp.keys():
         hp.B = np.array(hp.B.cpu())

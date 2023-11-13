@@ -7,12 +7,13 @@ from example_pde_model import Advection
 from example_model import return_model_advection as model
 import matplotlib.pylab as plt
 
-c = 10
+torch.set_float32_matmul_precision('high')
+model_hp = pinns.read_yaml("../default-parameters.yml")
+c = model_hp.c
 real_u, real_t, real_x = get_dataset(c=c, n_t=200, n_x=128)
 gpu = torch.cuda.is_available()
 device = "cuda" if gpu else "cpu"
 
-model_hp = pinns.read_yaml("../default-parameters.yml")
 model_hp.data_u = real_u.copy()
 model_hp.data_t = real_t.copy()
 model_hp.data_x = real_x.copy()
@@ -22,7 +23,9 @@ model_hp.verbose = True
 model_hp.pth_name = "test.pth"
 model_hp.npz_name = "test.npz"
 
-NN, model_hp = pinns.train(model_hp, Advection, return_dataset, model(model_hp.hard_periodicity), gpu=gpu)
+Model_cl = model(model_hp.hard_periodicity)
+
+NN, model_hp = pinns.train(model_hp, Advection, return_dataset, Model_cl, gpu=gpu)
 
 xx = NN.test_set.x
 tt = NN.test_set.t
@@ -69,6 +72,9 @@ plt.plot(gt[:, 0])
 plt.savefig("plots/ground_truth_time_0.png")
 plt.close()
 
+plt.plot(NN.test_scores)
+plt.savefig("plots/test_scores.png")
+plt.close()
 
 for k in NN.loss_values.keys():
     try:
@@ -104,5 +110,3 @@ for key in NN.temporal_weights.keys():
         plt.close()
     except:
         print(f"Couldn't plot t_weights for {key}")
-
-import pdb; pdb.set_trace()

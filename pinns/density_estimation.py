@@ -1,7 +1,7 @@
 import math
 import copy
 import numpy as np
-from tqdm import trange
+from tqdm import trange, tqdm
 from scipy.special import softmax
 import optuna
 import torch
@@ -66,11 +66,17 @@ def checkpoint_values(dic_values, dic_tmp_values):
         dic_values[key].append(torch.stack(dic_tmp_values[key]).mean().item())
 
 
-def model_params(model, hp):
+def model_params_data(model, hp):
     params = model.parameters()
-    if hp.model["name"] == "RFF":
-        params = skip_first(params)
-    return params
+    for p in params:
+        try:
+            data = p.grad.data
+            yield data
+        except:
+            pass
+    # if hp.model["name"] == "RFF":
+    #     params = skip_first(params)
+    # return params
 
 
 def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
@@ -80,14 +86,14 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
             loss_k = loss_values[k][-1]
             loss_k.backward(retain_graph=True)
             grad_loss_k = [
-                p.grad.data.flatten().clone() for p in model_params(model, hp)
+                p.flatten().clone() for p in model_params_data(model, hp)
             ]
             grad_norms[k] = Norm2(torch.cat(grad_loss_k))
             if device != "cpu":
                 grad_norms[k] = grad_norms[k].cpu()
             grad_norms[k] = grad_norms[k]
-            for p in model_params(model, hp):
-                p.grad.data.zero_()
+            for p in model_params_data(model, hp):
+                p.zero_()
         else:
             grad_norms[k] = 0
     summed_grads = np.sum(list(grad_norms.values()))
@@ -176,6 +182,7 @@ class DensityEstimator:
         self.lambdas_scalar = lambdas
         self.loss_values = loss_values
         self.loss_fn = loss_fn
+        self.test_scores = []
 
     def setup_temporal_causality(self):
         self.temporal_weights = {}
@@ -224,7 +231,7 @@ class DensityEstimator:
         if self.hp.self_adapting_loss_balancing["status"]:
             f = self.hp.self_adapting_loss_balancing["step"]
             # iter_b = self.hp.self_adapting_loss_balancing["i"]
-            if self.epoch != 1 and self.epoch % f == 0:
+            if self.it != 1 and self.it % f == 0:
                 alpha = self.hp.self_adapting_loss_balancing["alpha"]
                 balancing_loss(
                     self.loss_values,
@@ -236,7 +243,7 @@ class DensityEstimator:
                 )
         elif self.hp.relobralo["status"]:
             f = self.hp.relobralo["step"]
-            if self.epoch != 1 and self.epoch % f == 0:
+            if self.it != 1 and self.it % f == 0:
                 rho = self.hp.relobralo["rho"]
                 alpha = self.hp.relobralo["alpha"]
                 T = self.hp.relobralo["T"]
@@ -271,13 +278,13 @@ class DensityEstimator:
         self.scheduler.step()
 
         if self.hp.cosine_anealing["status"]:
-            # so that is starts on the end of the epoch number, or
+            # so that is starts on the end of the it number, or
             # on the start of the new one
-            # if self.epoch == 21:
+            # if self.it == 21:
             #     import pdb; pdb.set_trace()
-            first_epoch = self.epoch == 1
-            epoch_after = (self.epoch - 1) % self.hp.cosine_anealing["step"] == 0
-            if not first_epoch and epoch_after:
+            first_it = self.it == 1
+            it_after = (self.it - 1) % self.hp.cosine_anealing["step"] == 0
+            if not first_it and it_after:
                 self.times += 1
                 for g in self.optimizer.param_groups:
                     g["lr"] = self.hp.lr / (2**self.times)
@@ -287,7 +294,7 @@ class DensityEstimator:
                 )
 
     def update_description_bar(self, train_iterator):
-        text = f"Iterations [{self.epoch}/{self.hp.epochs}]"
+        text = f"Iterations [{self.it}/{self.hp.max_iters}]"
         for key in self.hp["losses"].keys():
             if self.hp["losses"][key]["report"]:
                 r_loss = self.loss_values[key][-1].item()
@@ -306,11 +313,17 @@ class DensityEstimator:
 
         predictions = []
         with torch.no_grad():
-            for i in self.range(0, self.n_test, bs):
+            for i in self.range(0, self.n_test, bs, leave=False):
                 idx = batch_idx[i : (i + bs)]
                 pred = self.model(self.test_set.samples[idx])
                 predictions.append(pred)
         return torch.cat(predictions)
+
+    def write(self, text):
+        if self.hp.verbose:
+            tqdm.write(text)
+        else:
+            print(text)
 
     def predict_test(self):
         predictions = self.test_loop()
@@ -319,71 +332,96 @@ class DensityEstimator:
             predictions, self.test_set.targets[: predictions.shape[0]]
         ).item()
         if self.hp.verbose:
-            print(f"Test Error: {test_loss:>4f}")
+            self.write(f"[{self.it}/{self.hp.max_iters}] Test Error: {test_loss:>4f}")
         return test_loss
 
-    def test_and_maybe_save(self, best_test_score):
-        if self.epoch == 1:
+    def test_and_maybe_save(self, it):
+        if it == 1:
             if self.hp.save_model:
                 torch.save(self.model.state_dict(), self.hp.pth_name)
-            return best_test_score
-        elif self.epoch % self.hp.test_frequency == 0:
+        elif it % self.hp.test_frequency == 0:
             test_score = self.predict_test()
-            if test_score < best_test_score:
-                best_test_score = test_score
-                # best_epoch = epoch
+            if test_score < self.best_test_score:
+                self.best_test_score = test_score
+                # best_it = it
                 if self.hp.verbose:
-                    print(f"best model is now from epoch {self.epoch}")
+                    self.write("Best score (just above)")
                 if self.hp.save_model:
                     torch.save(self.model.state_dict(), self.hp.pth_name)
-            return test_score
+            self.test_scores.append(test_score)
 
-    def optuna_stop(self, best_test, test_error):
-        if self.trial:
-            self.trial.report(test_error, self.epoch)
+    def optuna_stop(self, it):
+        if self.trial and it != 1 and it % self.hp.test_frequency == 0:
+            self.trial.report(self.test_scores[-1], it)
             if self.trial.should_prune():
-                if self.return_model:
-                    if "B" in self.hp.keys():
-                        self.hp.B = np.array(self.hp.B.cpu())
-                    self.hp.best_score = best_test
-                    np.savez(
-                        self.hp.npz_name,
-                        **self.hp,
-                    )
+                if "B" in self.hp.keys():
+                    self.hp.B = np.array(self.hp.B.cpu())
+                self.hp.best_score = self.best_test_score
+                np.savez(
+                    self.hp.npz_name,
+                    **self.hp,
+                )
                 raise optuna.exceptions.TrialPruned()
+
 
     def convert_last_loss_value(self):
         for k in self.loss_values.keys():
             self.loss_values[k][-1] = self.loss_values[k][-1].item()
 
+
+    def early_stop(self, it, loss, break_loop):
+        if torch.isnan(loss):
+            break_loop = True
+        if self.hp.early_stopping["status"]:
+            if it != 1 and it % self.hp.test_frequency == 0:
+                patience = self.hp.early_stopping["patience"]
+                threshold = self.hp.early_stopping["value"]
+                if len(self.test_scores) + 1 > patience:
+                    ref = self.test_scores[-patience]
+                    other_scores = np.array(self.test_scores[-patience+1:])
+                    if (ref + threshold - other_scores < 0).all():
+                        break_loop = True
+        return break_loop
+
     def fit(self):
+        use_amp = True
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
         self.setup_losses()
         self.setup_temporal_causality()
         self.model.train()
-        best_test_score = np.inf
-        # best_epoch = 0
-        iterators = self.range(1, self.hp.epochs + 1, 1)
-        for self.epoch in iterators:
+        self.best_test_score = np.inf
+        # best_it = 0
+        iterators = self.range(1, self.hp.max_iters + 1, 1)
+        for self.it in iterators:
             self.optimizer.zero_grad()
 
             data_batch = next(self.data)
-            target_pred = self.model(data_batch[0])
-            true_pred = data_batch[1]
+            with torch.autocast(device_type=self.device, dtype=torch.float16, enabled=use_amp):
+                target_pred = self.model(data_batch[0])
+                true_pred = data_batch[1]
 
-            self.compute_loss(true_pred, target_pred)
-            self.loss_balancing()
-            loss = sum_loss(self.loss_values, self.lambdas_scalar)
-            loss.backward()
+                self.compute_loss(true_pred, target_pred)
+                self.loss_balancing()
+                loss = sum_loss(self.loss_values, self.lambdas_scalar)
+            scaler.scale(loss).backward()
+            # loss.backward()
             self.clip_gradients()
 
-            self.optimizer.step()
+            # self.optimizer.step()
+            scaler.step(self.optimizer)
+            scaler.update()
             if self.scheduler_status:
                 self.scheduler_update()
             if self.hp.verbose:
                 self.update_description_bar(iterators)
 
-            test_error = self.test_and_maybe_save(best_test_score)
-            self.optuna_stop(best_test_score, test_error)
+            
+            self.test_and_maybe_save(self.it)
+            self.optuna_stop(self.it)
+            break_loop = False
+            break_loop = self.early_stop(self.it, loss, break_loop)
+            if break_loop:
+                break
         self.convert_last_loss_value()

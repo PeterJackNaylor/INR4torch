@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 def gen_b(mapping, scale, input_size, gpu=False):
     shape = (mapping, input_size)
-    B = torch.tensor(random.normal(size=shape).astype(float32))
+    B = torch.from_numpy(random.normal(size=shape).astype(float32))
     if gpu:
         B = B.to("cuda")
     return B * scale
@@ -159,6 +159,19 @@ class INR(nn.Module):
             self.input_size = self.fourier_size * 2
         elif self.name == "SIREN":
             self.first = nn.Identity()
+        if self.hp.model["modified_mlp"]:
+            self.act = nn.Tanh
+            self.setup_UV()
+
+    def setup_UV(self):
+        linear_layer_fn = linear_fn(self.hp.model["linear"], self.hp)
+        self.U = nn.Sequential(
+                linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
+            )
+        self.V = nn.Sequential(
+                linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
+            )
+    
     def fourier_mapping_setup(self, B):
         n, p = B.shape
         layer = nn.Linear(n, p, bias=False)
@@ -209,15 +222,28 @@ class INR(nn.Module):
     def forward(self, *args):
         xin = torch.cat(args, axis=1)
         xin = self.first(xin)
+
+        if self.hp.model["modified_mlp"]:
+            Ux = self.U(xin)
+            Vx = self.V(xin)
+
         if self.hp.model["skip"]:
             for i, layer in enumerate(self.mlp.model):
-                if layer.is_first:
-                    x = layer(xin)
-                elif layer.is_last:
-                    out = layer(x)
+                if layer.is_first or layer.is_last:
+                    y = layer(xin)
                 else:
-                    x = layer(x) + x if i % 2 == 1 else layer(x)
-        else:
+                    if i % 2 == 1:
+                        y = layer(x) + x
+                    else:
+                        y = layer(x)
+                
+                if self.hp.model["modified_mlp"]:
+                    x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
+                else:
+                    x = y
+                if layer.is_last:
+                    out = x
+        else:   
             out = self.mlp(xin)
         # out = torch.squeeze(out)
         return self.final_act(out)

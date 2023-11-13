@@ -8,7 +8,7 @@ def advection_residue(model, x, t, c=1):
     x.requires_grad_(True)
     t.requires_grad_(True)
     u = model(x, t)
-
+    
     du_dx = pinns.gradient(u, x)
     du_dt = pinns.gradient(u, t)
 

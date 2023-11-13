@@ -1,22 +1,23 @@
 #training
-epochs: 2000 #180 #00
+max_iters: 200000 #180 #00
 normalise_targets: True
-test_frequency: 500
+test_frequency: 1000
 save_model: True
 hard_periodicity: True
+c: 60
 
 #Models
 model:
   name: RFF #or RFF/SIREN/WIRES
-  hidden_nlayers: 4
+  hidden_nlayers: 6
   hidden_width: 256
   scale: 1
   skip: False
   ## RFF specific
   mapping_size: 256
   activation: tanh
-  bi_input_encoder: True # if you have a seperate encoder for the spatial and temporal inputs.
-  linear: RWF # HE # Glorot # RWF
+  modified_mlp: True # if you have a seperate encoder for the spatial and temporal inputs.
+  linear: RWF # HE # Glorot # RWF RWF does not work with SIREN
   # RWF Specific
   mean: 1
   std: 0.1
@@ -46,7 +47,7 @@ losses:
 
 # learning schemes
 temporal_causality:
-  M: 16 # powers of 2 only
+  M: 32 # powers of 2 only
   eps: 1
   step: 1 #update
 
@@ -66,8 +67,9 @@ self_adapting_loss_balancing:
 
 
 early_stopping: # not implemented
-  status: False
-  patience: 15
+  status: True
+  patience: 20
+  value: 0.0001
 
 # optimizers
 lr: 1.e-3
@@ -75,16 +77,19 @@ eps: 1.e-8 #adam precision
 clip_gradients: True
 
 # schedulers
-learning_rate_decay:
-  status: True
-  step: 500
-  gamma: 0.1 # 0.9
 # learning_rate_decay:
 #   status: True
-#   step: 2000
-#   gamma: 0.9 # 0.9
+#   step: 500
+#   gamma: 0.1
+learning_rate_decay:
+  status: True
+  step: 2000
+  gamma: 0.9 # 0.9
 
 cosine_anealing:
   status: False
   min_eta: 0
   step: 500
+
+optuna:
+  trials: 100

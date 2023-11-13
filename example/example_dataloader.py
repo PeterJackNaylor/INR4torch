@@ -50,13 +50,12 @@ class XT(pinns.DataPlaceholder):
             if not normalise_targets:
                 nv_targets = [(0, 1) for _ in range(targets.shape[1])]
             nv_targets = self.normalize(targets, nv_targets, True)
-
-        self.samples = torch.tensor(samples).float()
+        self.samples = torch.from_numpy(samples).float()
         self.nv_samples = nv_samples
         self.nv_targets = nv_targets
 
         if self.need_target:
-            self.targets = torch.tensor(targets)
+            self.targets = torch.from_numpy(targets)
         if gpu:
             self.send_cuda()
             self.device = "cuda"
