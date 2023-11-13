@@ -381,9 +381,19 @@ class DensityEstimator:
                         break_loop = True
         return break_loop
 
+    def autocasting(self):
+        if self.device == "cpu":
+            use_amp = False
+            dtype = torch.bfloat16
+        else:
+            use_amp = True
+            dtype = torch.float16
+        self.use_amp = use_amp
+        self.dtype = dtype
+
     def fit(self):
-        use_amp = True
-        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+        self.autocasting()
+        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
         self.setup_losses()
@@ -397,7 +407,7 @@ class DensityEstimator:
 
             data_batch = next(self.data)
             with torch.autocast(
-                device_type=self.device, dtype=torch.float16, enabled=use_amp
+                device_type=self.device, dtype=self.dtype, enabled=self.use_amp
             ):
                 target_pred = self.model(data_batch[0])
                 true_pred = data_batch[1]

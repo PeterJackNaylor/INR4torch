@@ -14,7 +14,7 @@ class PeriodicityLayer(nn.Module):
         x = x_t[:, 0]
         t = x_t[:, 1]
         w_t = 2 * torch.pi / self.p_t
-        w_x = 1 / torch.pi
+        w_x = 1 * torch.pi
         return torch.column_stack(
             [cos(w_t * t), sin(w_t * t), cos(w_x * x), sin(w_x * x)]
         )
