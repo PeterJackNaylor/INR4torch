@@ -2,7 +2,8 @@ from functools import partial
 import torch
 import torch.nn as nn
 from numpy import random, float32, sqrt
-import torch.nn.functional as F
+
+# import torch.nn.functional as F
 
 
 def gen_b(mapping, scale, input_size, gpu=False):
