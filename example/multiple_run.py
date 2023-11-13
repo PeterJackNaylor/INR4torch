@@ -9,12 +9,15 @@ import matplotlib.pylab as plt
 import optuna
 from functools import partial
 
+
 def objective(trial, model_hp, real_u):
     model_hp.pth_name = f"multiple/test_{trial.number}.pth"
     model_hp.npz_name = f"multiple/test_{trial.number}.npz"
     Model = model_fn(model_hp.hard_periodicity)
 
-    NN, model_hp = pinns.train(model_hp, Advection, return_dataset, Model, gpu=gpu, trial=trial)
+    NN, model_hp = pinns.train(
+        model_hp, Advection, return_dataset, Model, gpu=gpu, trial=trial
+    )
     xx = NN.test_set.x
     tt = NN.test_set.t
     predictions = NN.test_loop()
@@ -25,8 +28,8 @@ def objective(trial, model_hp, real_u):
     score = np.linalg.norm(gt - predictions) / np.linalg.norm(gt)
     return score
 
-def load_model(model_hp, weights):
 
+def load_model(model_hp, weights):
     Model = model_fn(model_hp.hard_periodicity)
     model_hp.B = torch.from_numpy(model_hp.B)
     model = Model(
@@ -34,7 +37,7 @@ def load_model(model_hp, weights):
         model_hp.input_size,
         output_size=model_hp.output_size,
         hp=model_hp,
-        )
+    )
     if gpu:
         model = model.cuda()
 
@@ -49,6 +52,7 @@ def load_model(model_hp, weights):
 
     NN = Advection(train, test, model, model_hp, gpu)
     return NN
+
 
 model_hp = pinns.read_yaml("../default-parameters.yml")
 c = model_hp.c
@@ -94,18 +98,29 @@ print("#                        #")
 print("##########################")
 
 
-
-im = plt.imshow(predictions, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+im = plt.imshow(
+    predictions,
+    extent=[tt.min(), tt.max(), xx.min(), xx.max()],
+    aspect="auto",
+    cmap="jet",
+)
 plt.colorbar(im)
 plt.savefig("multiple/plots/predictions.png")
 plt.close()
 
-im = plt.imshow(gt, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+im = plt.imshow(
+    gt, extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet"
+)
 plt.colorbar(im)
 plt.savefig("multiple/plots/ground_truth.png")
 plt.close()
 
-im = plt.imshow(np.abs(gt-predictions), extent=[tt.min(), tt.max(), xx.min(), xx.max()], aspect="auto", cmap="jet")
+im = plt.imshow(
+    np.abs(gt - predictions),
+    extent=[tt.min(), tt.max(), xx.min(), xx.max()],
+    aspect="auto",
+    cmap="jet",
+)
 plt.colorbar(im)
 plt.savefig("multiple/plots/absolute_error.png")
 plt.close()
@@ -117,5 +132,3 @@ plt.close()
 plt.plot(gt[:, 0])
 plt.savefig("multiple/plots/ground_truth_time_0.png")
 plt.close()
-
-import pdb; pdb.set_trace()

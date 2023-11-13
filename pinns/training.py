@@ -6,12 +6,7 @@ from .models import gen_b
 # from .util_train import estimate_density
 
 
-
-
-def train(
-    hp, estimate_density_cl, dataset_fn, model_cl, trial=None, gpu=False
-):
-
+def train(hp, estimate_density_cl, dataset_fn, model_cl, trial=None, gpu=False):
     train, test = dataset_fn(hp, gpu=gpu)
 
     hp.input_size = train.input_size

@@ -44,7 +44,14 @@ def divergence(y, x):
 
 def gradient(y, x, grad_outputs=None, allow_unused=True):
     grad_outputs = torch.ones_like(y)
-    grad = torch.autograd.grad(y, [x], grad_outputs=grad_outputs, create_graph=True, allow_unused=allow_unused, materialize_grads=allow_unused)[0]
+    grad = torch.autograd.grad(
+        y,
+        [x],
+        grad_outputs=grad_outputs,
+        create_graph=True,
+        allow_unused=allow_unused,
+        materialize_grads=allow_unused,
+    )[0]
     return grad
 
 

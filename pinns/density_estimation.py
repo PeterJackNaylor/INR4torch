@@ -85,9 +85,7 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
         if lambdas[k][-1] != 0:
             loss_k = loss_values[k][-1]
             loss_k.backward(retain_graph=True)
-            grad_loss_k = [
-                p.flatten().clone() for p in model_params_data(model, hp)
-            ]
+            grad_loss_k = [p.flatten().clone() for p in model_params_data(model, hp)]
             grad_norms[k] = Norm2(torch.cat(grad_loss_k))
             if device != "cpu":
                 grad_norms[k] = grad_norms[k].cpu()
@@ -108,7 +106,6 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
 
 class DensityEstimator:
     def __init__(self, train, test, model, model_hp, gpu, trial=None):
-
         self.data = train
         self.test_set = test
         self.n = len(train)
@@ -157,7 +154,6 @@ class DensityEstimator:
         loss_fn = {}
 
         for key in self.hp.losses.keys():
-
             if "lambda" in self.hp.losses[key]:
                 lambdas[key] = [self.hp.losses[key]["lambda"]]
             else:
@@ -190,7 +186,9 @@ class DensityEstimator:
             if "temporal_causality" in self.hp["losses"][key]:
                 if self.hp["losses"][key]["temporal_causality"]:
                     M = self.hp.temporal_causality["M"]
-                    self.temporal_weights[key] = [torch.ones(M, requires_grad=False, device=self.device)]
+                    self.temporal_weights[key] = [
+                        torch.ones(M, requires_grad=False, device=self.device)
+                    ]
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
@@ -219,6 +217,7 @@ class DensityEstimator:
             residue = residue_computation(z, zhat).flatten()
             loss = Norm2(residue) / (residue.shape[0]) ** 0.5
             return loss
+
         return f
 
     def range(self, start, end, step, leave=True):
@@ -363,11 +362,9 @@ class DensityEstimator:
                 )
                 raise optuna.exceptions.TrialPruned()
 
-
     def convert_last_loss_value(self):
         for k in self.loss_values.keys():
             self.loss_values[k][-1] = self.loss_values[k][-1].item()
-
 
     def early_stop(self, it, loss, break_loop):
         if torch.isnan(loss):
@@ -378,7 +375,7 @@ class DensityEstimator:
                 threshold = self.hp.early_stopping["value"]
                 if len(self.test_scores) + 1 > patience:
                     ref = self.test_scores[-patience]
-                    other_scores = np.array(self.test_scores[-patience+1:])
+                    other_scores = np.array(self.test_scores[-patience + 1 :])
                     if (ref + threshold - other_scores < 0).all():
                         break_loop = True
         return break_loop
@@ -398,7 +395,9 @@ class DensityEstimator:
             self.optimizer.zero_grad()
 
             data_batch = next(self.data)
-            with torch.autocast(device_type=self.device, dtype=torch.float16, enabled=use_amp):
+            with torch.autocast(
+                device_type=self.device, dtype=torch.float16, enabled=use_amp
+            ):
                 target_pred = self.model(data_batch[0])
                 true_pred = data_batch[1]
 
@@ -417,7 +416,6 @@ class DensityEstimator:
             if self.hp.verbose:
                 self.update_description_bar(iterators)
 
-            
             self.test_and_maybe_save(self.it)
             self.optuna_stop(self.it)
             break_loop = False

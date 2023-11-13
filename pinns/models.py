@@ -4,6 +4,7 @@ import torch.nn as nn
 from numpy import random, float32, sqrt
 import torch.nn.functional as F
 
+
 def gen_b(mapping, scale, input_size, gpu=False):
     shape = (mapping, input_size)
     B = torch.from_numpy(random.normal(size=shape).astype(float32))
@@ -11,16 +12,20 @@ def gen_b(mapping, scale, input_size, gpu=False):
         B = B.to("cuda")
     return B * scale
 
+
 class LinearLayerGlorot(nn.Module):
-    """ Custom Linear layer but mimics a standard linear layer """
+    """Custom Linear layer but mimics a standard linear layer"""
+
     def __init__(self, size_in, size_out):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
-        self.weights = nn.Parameter(torch.Tensor(size_out, size_in))  # nn.Parameter is a Tensor that's a module parameter.
+        self.weights = nn.Parameter(
+            torch.Tensor(size_out, size_in)
+        )  # nn.Parameter is a Tensor that's a module parameter.
         self.bias = nn.Parameter(torch.Tensor(size_out))
         # initialize weights and biases
-        nn.init.xavier_normal_(self.weights, gain=nn.init.calculate_gain('relu'))
-        
+        nn.init.xavier_normal_(self.weights, gain=nn.init.calculate_gain("relu"))
+
         nn.init.zeros_(self.bias)  # bias init
 
     def forward(self, x):
@@ -29,26 +34,31 @@ class LinearLayerGlorot(nn.Module):
 
 
 class LinearLayerRWF(nn.Module):
-    """ Custom Linear layer but mimics a standard linear layer """
+    """Custom Linear layer but mimics a standard linear layer"""
+
     def __init__(self, size_in, size_out, mean, std):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
         w = torch.Tensor(size_out, size_in)
-        nn.init.kaiming_uniform_(w) #, gain=nn.init.calculate_gain('relu'))
-        s = torch.Tensor(size_out, )
+        nn.init.kaiming_uniform_(w)  # , gain=nn.init.calculate_gain('relu'))
+        s = torch.Tensor(
+            size_out,
+        )
         nn.init.normal_(s, mean=mean, std=std)
         s = torch.exp(s)
 
-        v = w / s[:,None]
+        v = w / s[:, None]
 
         self.v_weights = nn.Parameter(v)
-        self.s_weights = nn.Parameter(s)  # nn.Parameter is a Tensor that's a module parameter.
+        self.s_weights = nn.Parameter(
+            s
+        )  # nn.Parameter is a Tensor that's a module parameter.
         self.bias = nn.Parameter(torch.Tensor(size_out))
 
         nn.init.zeros_(self.bias)  # bias init
 
     def forward(self, x):
-        kernel =  self.v_weights * self.s_weights[:, None]
+        kernel = self.v_weights * self.s_weights[:, None]
         w_times_x = torch.mm(x, kernel.t())
         return torch.add(w_times_x, self.bias)  # w times x + b
 
@@ -60,6 +70,7 @@ def linear_fn(text, hp):
         return LinearLayerGlorot
     elif text == "RWF":
         return partial(LinearLayerRWF, mean=hp.model["mean"], std=hp.model["std"])
+
 
 # create the GON network (a SIREN as in https://vsitzmann.github.io/siren/)
 class SirenLayer(nn.Module):
@@ -97,6 +108,7 @@ class SirenLayer(nn.Module):
             x = x + phase_shift
         return x if self.is_last else torch.sin(self.w0 * x)
 
+
 class SIREN_model(nn.Module):
     def __init__(
         self,
@@ -124,6 +136,7 @@ class SIREN_model(nn.Module):
     def forward(self, xin):
         return self.model(xin)
 
+
 class INR(nn.Module):
     def __init__(
         self,
@@ -132,7 +145,6 @@ class INR(nn.Module):
         output_size,
         hp,
     ):
-
         super(INR, self).__init__()
         self.name = name
         self.input_size = input_size
@@ -166,12 +178,12 @@ class INR(nn.Module):
     def setup_UV(self):
         linear_layer_fn = linear_fn(self.hp.model["linear"], self.hp)
         self.U = nn.Sequential(
-                linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
-            )
+            linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
+        )
         self.V = nn.Sequential(
-                linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
-            )
-    
+            linear_layer_fn(self.input_size, self.hp.model["hidden_width"]), self.act()
+        )
+
     def fourier_mapping_setup(self, B):
         n, p = B.shape
         layer = nn.Linear(n, p, bias=False)
@@ -195,7 +207,7 @@ class INR(nn.Module):
                 self.hp.model["hidden_nlayers"],
                 self.hp.model["hidden_width"],
                 self.hp.model["scale"],
-                linear_fn(self.hp.model["linear"], self.hp)
+                linear_fn(self.hp.model["linear"], self.hp),
             )
 
     def gen_rff(self):
@@ -221,29 +233,29 @@ class INR(nn.Module):
 
     def forward(self, *args):
         xin = torch.cat(args, axis=1)
-        xin = self.first(xin)
+        x = self.first(xin)
 
         if self.hp.model["modified_mlp"]:
-            Ux = self.U(xin)
-            Vx = self.V(xin)
+            Ux = self.U(x)
+            Vx = self.V(x)
 
         if self.hp.model["skip"]:
             for i, layer in enumerate(self.mlp.model):
                 if layer.is_first or layer.is_last:
-                    y = layer(xin)
+                    y = layer(x)
                 else:
                     if i % 2 == 1:
                         y = layer(x) + x
                     else:
                         y = layer(x)
-                
+
                 if self.hp.model["modified_mlp"]:
                     x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
                 else:
                     x = y
                 if layer.is_last:
                     out = x
-        else:   
+        else:
             out = self.mlp(xin)
         # out = torch.squeeze(out)
         return self.final_act(out)

@@ -3,19 +3,23 @@ import torch
 import torch.nn as nn
 from torch import cos, sin
 
+
 class PeriodicityLayer(nn.Module):
     def __init__(self):
         super().__init__()
         self.p_t = nn.Parameter(torch.Tensor(1))
         torch.nn.init.constant_(self.p_t, torch.pi)
-        
+
     def forward(self, x_t):
         x = x_t[:, 0]
         t = x_t[:, 1]
         w_t = 2 * torch.pi / self.p_t
         w_x = 1 / torch.pi
-        return torch.column_stack([cos(w_t * t), sin(w_t * t), cos(w_x * x), sin(w_x * x)])
-    
+        return torch.column_stack(
+            [cos(w_t * t), sin(w_t * t), cos(w_x * x), sin(w_x * x)]
+        )
+
+
 class INR_hard_periodicity(INR):
     def __init__(
         self,
@@ -24,7 +28,6 @@ class INR_hard_periodicity(INR):
         output_size,
         hp,
     ):
-
         super(INR, self).__init__()
         self.name = name
         self.input_size = input_size
