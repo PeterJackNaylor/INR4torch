@@ -188,22 +188,28 @@ class DensityEstimator:
                 if self.hp["losses"][key]["temporal_causality"]:
                     M = self.hp.temporal_causality["M"]
                     self.temporal_weights[key] = [
-                        torch.ones(M, requires_grad=False, device=self.device)
+                        # torch.zeros(M, requires_grad=False, device=self.device)
                     ]
+                    # self.temporal_weights[key][0][0] = 1.
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
     def temporal_loss(self, key, residue_computation, bs_loss):
         def f(z, zhat):
             residue = residue_computation(z, zhat)
-            square_res = residue.reshape(bs_loss // self.M, self.M)
-            M_losses = Norm2(square_res, dim=0)
-            shifted_M_loss = torch.zeros_like(M_losses)
-
-            shifted_M_loss[1:] = M_losses[:-1]
-            w_i = torch.exp(-self.eps * torch.cumsum(shifted_M_loss, dim=0)).detach()
-            w_i.requires_grad_(False)
-            self.temporal_weights[key].append(w_i)
+            square_res = residue.reshape(self.M, bs_loss // self.M)
+            M_losses = Norm2(square_res, dim=1)
+            f = self.hp.temporal_causality["step"]
+            if self.it == 1 or (self.it - 1) % f == 0:
+                shifted_M_loss = torch.zeros_like(M_losses)
+                shifted_M_loss[1:] = M_losses[:-1]
+                w_i = torch.exp(
+                    -self.eps * torch.cumsum(shifted_M_loss, dim=0)
+                ).detach()
+                w_i.requires_grad_(False)
+                self.temporal_weights[key].append(w_i)
+            else:
+                w_i = self.temporal_weights[key][-1]
             loss = torch.mean(w_i * M_losses)
             return loss
 
@@ -230,7 +236,6 @@ class DensityEstimator:
     def loss_balancing(self):
         if self.hp.self_adapting_loss_balancing["status"]:
             f = self.hp.self_adapting_loss_balancing["step"]
-            # iter_b = self.hp.self_adapting_loss_balancing["i"]
             if self.it != 1 and self.it % f == 0:
                 alpha = self.hp.self_adapting_loss_balancing["alpha"]
                 balancing_loss(
@@ -248,26 +253,31 @@ class DensityEstimator:
                 alpha = self.hp.relobralo["alpha"]
                 T = self.hp.relobralo["T"]
                 with torch.no_grad():
-                    lambs_hat = softmax(
-                        [
-                            self.loss_values[i][-1]
-                            / (self.loss_values[i][-2] * T + 1e-12)
-                            for i in self.loss_values.keys()
-                        ]
-                    ) * len(self.loss_values.keys())
-                    lambs0_hat = softmax(
-                        [
-                            self.loss_values[i][-1]
-                            / (self.loss_values[i][0] * T + 1e-12)
-                            for i in self.loss_values.keys()
-                        ]
-                    ) * len(self.loss_values.keys())
+                    sm = nn.Softmax(dim=0)
+
+                    def g(li, i):
+                        return li[i][-1] / (li[i][-2] * T + 1e-12)
+
+                    def g0(li, i):
+                        return li[i][-1] / (li[i][0] * T + 1e-12)
+
+                    val = torch.stack(
+                        [g(self.loss_values, i) for i in self.loss_values.keys()]
+                    )
+                    lambs_hat = sm(val) * len(self.loss_values.keys())
+                    val_0 = torch.stack(
+                        [g0(self.loss_values, i) for i in self.loss_values.keys()]
+                    )
+                    lambs0_hat = sm(val_0) * len(self.loss_values.keys())
                     for i, key in enumerate(self.loss_values.keys()):
-                        self.lambdas_scalar[key].append(
+                        l_i = (
                             rho * alpha * self.lambdas_scalar[key][-1]
                             + (1 - rho) * alpha * lambs0_hat[i]
                             + (1 - alpha) * lambs_hat[i]
                         )
+                        if self.device == "cuda":
+                            l_i = l_i.cpu()
+                        self.lambdas_scalar[key].append(l_i.item())
 
     def clip_gradients(self):
         if self.hp.clip_gradients:
@@ -351,7 +361,13 @@ class DensityEstimator:
             self.test_scores.append(test_score)
 
     def optuna_stop(self, it):
-        if self.trial and it != 1 and it % self.hp.test_frequency == 0:
+        start = self.hp.optuna["patience"]
+        if (
+            self.trial
+            and it != 1
+            and self.it > start
+            and it % self.hp.test_frequency == 0
+        ):
             self.trial.report(self.test_scores[-1], it)
             if self.trial.should_prune():
                 if "B" in self.hp.keys():

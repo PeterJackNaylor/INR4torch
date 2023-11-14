@@ -1,10 +1,10 @@
 #training
-max_iters: 200000 #180 #00
+max_iters: 10000 #00 #180 #00
 normalise_targets: True
-test_frequency: 1000
+test_frequency: 1000 # 1000
 save_model: True
 hard_periodicity: True
-c: 60
+c: 20
 
 #Models
 model:
@@ -16,8 +16,8 @@ model:
   ## RFF specific
   mapping_size: 256
   activation: tanh
-  modified_mlp: True # if you have a seperate encoder for the spatial and temporal inputs.
-  linear: RWF # HE # Glorot # RWF RWF does not work with SIREN
+  modified_mlp: False #True # if you have a seperate encoder for the spatial and temporal inputs.
+  linear: HE # RWF # HE # Glorot # RWF RWF does not work with SIREN
   # RWF Specific
   mean: 1
   std: 0.1
@@ -48,7 +48,7 @@ losses:
 # learning schemes
 temporal_causality:
   M: 32 # powers of 2 only
-  eps: 1
+  eps: 1.e-1
   step: 1 #update
 
 
@@ -58,12 +58,12 @@ relobralo:
   T: 1.
   alpha: 0.999
   rho: 0.5
-  f: 10
+  step: 100
 
 self_adapting_loss_balancing:
   status: True
   alpha: 0.9
-  step: 1000 #update
+  step: 1000 #1000 #update
 
 
 early_stopping: # not implemented
@@ -92,4 +92,5 @@ cosine_anealing:
   step: 500
 
 optuna:
+  patience: 10000
   trials: 100

@@ -42,7 +42,6 @@ class Advection(pinns.DensityEstimator):
             M=M,
         )
         residue = advection_residue(self.model, x, t, self.hp.c)
-
         return residue
 
     def periodicity(self, z, z_hat):
