@@ -352,7 +352,8 @@ class DensityEstimator:
             if it != 1 and it % self.hp.test_frequency == 0:
                 patience = self.hp.early_stopping["patience"]
                 threshold = self.hp.early_stopping["value"]
-                if len(self.test_scores) + 1 > patience:
+                ignore_first = self.hp.early_stopping["ignore_first"]
+                if len(self.test_scores) + 1 - ignore_first > patience:
                     ref = self.test_scores[-patience]
                     other_scores = np.array(self.test_scores[-patience + 1 :])
                     if (ref + threshold - other_scores < 0).all():

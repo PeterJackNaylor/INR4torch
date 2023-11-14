@@ -1,5 +1,5 @@
 #training
-max_iters: 10000 #00 #180 #00
+max_iters: 200000 #00 #180 #00
 normalise_targets: True
 test_frequency: 1000 # 1000
 save_model: True
@@ -16,7 +16,7 @@ model:
   ## RFF specific
   mapping_size: 256
   activation: tanh
-  modified_mlp: False #True # if you have a seperate encoder for the spatial and temporal inputs.
+  modified_mlp: True #True # if you have a seperate encoder for the spatial and temporal inputs.
   linear: HE # RWF # HE # Glorot # RWF RWF does not work with SIREN
   # RWF Specific
   mean: 1
@@ -68,6 +68,7 @@ self_adapting_loss_balancing:
 
 early_stopping: # not implemented
   status: True
+  ignore_first: 5
   patience: 20
   value: 0.0001
 
@@ -76,11 +77,6 @@ lr: 1.e-3
 eps: 1.e-8 #adam precision
 clip_gradients: True
 
-# schedulers
-# learning_rate_decay:
-#   status: True
-#   step: 500
-#   gamma: 0.1
 learning_rate_decay:
   status: True
   step: 2000
