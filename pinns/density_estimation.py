@@ -1,35 +1,9 @@
-import math
-import copy
 import numpy as np
 from tqdm import trange, tqdm
-from scipy.special import softmax
 import optuna
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
-
-# import collections
-
-
-# def skip_first(it):
-#     """
-#     Skip the first element of an Iterator or Iterable,
-#     like a Generator or a list.
-#     This will always return a generator or raise TypeError()
-#     in case the argument's type is not compatible
-#     """
-#     if isinstance(it, collections.Iterator):
-#         try:
-#             next(it)
-#             yield from it
-#         except StopIteration:
-#             return
-#     elif isinstance(it, collections.Iterable):
-#         yield from skip_first(it.__iter__())
-#     else:
-#         raise TypeError(
-#             f"You must pass an Iterator or an Iterable to skip_first(), but you passed {it}"
-#         )
 
 
 def Norm1(vector, dim=None):
@@ -75,9 +49,6 @@ def model_params_data(model, hp):
             yield data
         except:
             pass
-    # if hp.model["name"] == "RFF":
-    #     params = skip_first(params)
-    # return params
 
 
 def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
@@ -160,7 +131,7 @@ class DensityEstimator:
             else:
                 lambdas[key] = [1]
             if key == "mse":
-                loss_fn[key] = RMSELoss()  # RMSELoss()
+                loss_fn[key] = RMSELoss()
             elif key == "mae":
                 loss_fn[key] = nn.L1Loss()
             else:
@@ -187,10 +158,7 @@ class DensityEstimator:
             if "temporal_causality" in self.hp["losses"][key]:
                 if self.hp["losses"][key]["temporal_causality"]:
                     M = self.hp.temporal_causality["M"]
-                    self.temporal_weights[key] = [
-                        # torch.zeros(M, requires_grad=False, device=self.device)
-                    ]
-                    # self.temporal_weights[key][0][0] = 1.
+                    self.temporal_weights[key] = []
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
@@ -261,13 +229,10 @@ class DensityEstimator:
                     def g0(li, i):
                         return li[i][-1] / (li[i][0] * T + 1e-12)
 
-                    val = torch.stack(
-                        [g(self.loss_values, i) for i in self.loss_values.keys()]
-                    )
+                    keys = self.loss_values.keys()
+                    val = torch.stack([g(self.loss_values, i) for i in keys])
                     lambs_hat = sm(val) * len(self.loss_values.keys())
-                    val_0 = torch.stack(
-                        [g0(self.loss_values, i) for i in self.loss_values.keys()]
-                    )
+                    val_0 = torch.stack([g0(self.loss_values, i) for i in keys])
                     lambs0_hat = sm(val_0) * len(self.loss_values.keys())
                     for i, key in enumerate(self.loss_values.keys()):
                         l_i = (
@@ -288,10 +253,7 @@ class DensityEstimator:
         self.scheduler.step()
 
         if self.hp.cosine_anealing["status"]:
-            # so that is starts on the end of the it number, or
-            # on the start of the new one
-            # if self.it == 21:
-            #     import pdb; pdb.set_trace()
+            # it starts on the end of the it number
             first_it = self.it == 1
             it_after = (self.it - 1) % self.hp.cosine_anealing["step"] == 0
             if not first_it and it_after:
@@ -416,7 +378,7 @@ class DensityEstimator:
         self.setup_temporal_causality()
         self.model.train()
         self.best_test_score = np.inf
-        # best_it = 0
+
         iterators = self.range(1, self.hp.max_iters + 1, 1)
         for self.it in iterators:
             self.optimizer.zero_grad()
@@ -437,8 +399,10 @@ class DensityEstimator:
 
             # self.optimizer.step()
             scaler.step(self.optimizer)
+            scale = scaler.get_scale()
             scaler.update()
-            if self.scheduler_status:
+            skip_lr_sched = scale > scaler.get_scale()
+            if self.scheduler_status and not skip_lr_sched:
                 self.scheduler_update()
             if self.hp.verbose:
                 self.update_description_bar(iterators)

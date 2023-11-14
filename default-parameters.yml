@@ -4,7 +4,7 @@ normalise_targets: True
 test_frequency: 1000 # 1000
 save_model: True
 hard_periodicity: True
-c: 20
+c: 80
 
 #Models
 model:
@@ -38,12 +38,12 @@ losses:
     temporal_causality: True
     bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
     method: pde
-  periodicity:
-    report: False
-    lambda: 1.e-1
-    temporal_causality: True
-    bs: 8192 # 8192 # 16384 # 32768 # powers of 2 only
-    method: periodicity
+  # periodicity:
+  #   report: False
+  #   lambda: 1.e-1
+  #   temporal_causality: True
+  #   bs: 8192 # 8192 # 16384 # 32768 # powers of 2 only
+  #   method: periodicity
 
 # learning schemes
 temporal_causality:
