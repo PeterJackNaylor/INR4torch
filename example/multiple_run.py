@@ -1,3 +1,4 @@
+from functools import partial
 import torch
 import numpy as np
 import pinns
@@ -7,7 +8,6 @@ from example_pde_model import Advection
 from example_model import return_model_advection as model_fn
 import matplotlib.pylab as plt
 import optuna
-from functools import partial
 
 
 def objective(trial, model_hp, real_u):
