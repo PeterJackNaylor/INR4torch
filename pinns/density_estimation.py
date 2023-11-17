@@ -42,7 +42,9 @@ def model_params_data(model, hp):
 
 def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
     grad_norms = {}
-    for k in loss_values.keys():
+    keys = loss_values.keys()
+    keys = [k for k in keys if hp.losses[k]["loss_balancing"]]
+    for k in keys:
         if lambdas[k][-1] != 0:
             loss_k = loss_values[k][-1]
             loss_k.backward(retain_graph=True)
@@ -56,7 +58,7 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
         else:
             grad_norms[k] = 0
     summed_grads = np.sum(list(grad_norms.values()))
-    for k in loss_values.keys():
+    for k in keys:
         if lambdas[k][-1] != 0:
             new_val = (summed_grads / grad_norms[k]).item()
             new_val = lambdas[k][-1] * alpha + new_val * (1 - alpha)
@@ -229,11 +231,13 @@ class DensityEstimator:
                         return li[i][-1] / (li[i][0] * T + 1e-12)
 
                     keys = self.loss_values.keys()
+                    keys = [k for k in keys if self.hp.losses[k]["loss_balancing"]]
+
                     val = torch.stack([g(self.loss_values, i) for i in keys])
-                    lambs_hat = sm(val) * len(self.loss_values.keys())
+                    lambs_hat = sm(val) * len(keys)
                     val_0 = torch.stack([g0(self.loss_values, i) for i in keys])
-                    lambs0_hat = sm(val_0) * len(self.loss_values.keys())
-                    for i, key in enumerate(self.loss_values.keys()):
+                    lambs0_hat = sm(val_0) * len(keys)
+                    for i, key in enumerate(keys):
                         l_i = (
                             rho * alpha * self.lambdas_scalar[key][-1]
                             + (1 - rho) * alpha * lambs0_hat[i]

@@ -20,6 +20,15 @@ def advection_residue(model, x, t, c=1):
     return residue
 
 
+def spatial_grad(model, x, t):
+    torch.set_grad_enabled(True)
+    x.requires_grad_(True)
+    t.requires_grad_(True)
+    u = model(x, t)
+    du_dx = pinns.gradient(u, x)
+    return du_dx
+
+
 def soft_periodicity(model, t):
     x_0 = torch.zeros_like(t)
     residue = model(x_0 - 1, t) - model(x_0 + 1, t)
@@ -58,3 +67,20 @@ class Advection(pinns.DensityEstimator):
         )
         residue = soft_periodicity(self.model, t)
         return residue
+
+    def spatial_gradient(self, z, z_hat):
+        x = pinns.gen_uniform(self.hp.losses["pde"]["bs"], self.device)
+
+        M = self.M if hasattr(self, "M") else None
+        temporal_scheme = self.hp.losses["pde"]["temporal_causality"]
+
+        t = pinns.gen_uniform(
+            self.hp.losses["pde"]["bs"],
+            self.device,
+            start=0,
+            end=1,
+            temporal_scheme=temporal_scheme,
+            M=M,
+        )
+        grad = spatial_grad(self.model, x, t)
+        return grad

@@ -28,9 +28,7 @@ losses:
   mse:
     report: True
     bs: 64
-  # mae:
-  #   report: False
-  #   lambda: 1.e-1
+    loss_balancing: True #wether to be included in loss balancing
   pde:
     report: True
     log: True
@@ -38,12 +36,24 @@ losses:
     temporal_causality: True
     bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
     method: pde
+    loss_balancing: True #wether to be included in loss balancing
   # periodicity:
   #   report: False
   #   lambda: 1.e-1
   #   temporal_causality: True
   #   bs: 8192 # 8192 # 16384 # 32768 # powers of 2 only
   #   method: periodicity
+  # spatial_grad:
+  #   report: True
+  #   log: True
+  #   lambda: 1000000
+  #   temporal_causality: True
+  #   bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+  #   method: spatial_gradient
+  #   loss_balancing: False #wether to be included in loss balancing
+
+
+
 
 # learning schemes
 temporal_causality:
@@ -51,6 +61,12 @@ temporal_causality:
   eps: 8.e-3
   step: 1 #update
 
+regularisation:
+  L1:
+    bs: 8192
+    method: L1
+    scalar: 1.e-1
+    temporal_causality: True
 
 # Loss balancing
 relobralo:
@@ -66,7 +82,7 @@ self_adapting_loss_balancing:
   step: 1000 #1000 #update
 
 
-early_stopping: # not implemented
+early_stopping:
   status: False
   ignore_first: 5
   patience: 20
