@@ -1,10 +1,10 @@
 #training
-max_iters: 600000 #00 #180 #00
+max_iters: 2000 #00 #180 #00
 normalise_targets: True
 test_frequency: 1000 # 1000
 save_model: True
 hard_periodicity: True
-c: 80
+c: 5
 
 #Models
 model:

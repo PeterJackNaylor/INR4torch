@@ -151,7 +151,6 @@ class INR(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         self.hp = hp
-
         self.setup()
 
         self.gen_architecture()
@@ -239,24 +238,21 @@ class INR(nn.Module):
         if self.hp.model["modified_mlp"]:
             Ux = self.U(x)
             Vx = self.V(x)
-
-        if self.hp.model["skip"]:
-            for i, layer in enumerate(self.mlp.model):
-                if layer.is_first or layer.is_last:
+        l_i = self.hp.model["hidden_nlayers"]
+        for i, layer in enumerate(self.mlp):
+            if i == 0 or i == l_i:
+                y = layer(x)
+            else:
+                if i % 2 == 1 and self.hp.model["skip"]:
+                    y = layer(x) + x
+                else:
                     y = layer(x)
-                else:
-                    if i % 2 == 1:
-                        y = layer(x) + x
-                    else:
-                        y = layer(x)
 
-                if self.hp.model["modified_mlp"]:
-                    x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
-                else:
-                    x = y
-                if layer.is_last:
-                    out = x
-        else:
-            out = self.mlp(xin)
-        # out = torch.squeeze(out)
+            if self.hp.model["modified_mlp"] and i != l_i:
+                x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
+            else:
+                x = y
+            if i == self.hp.model["hidden_nlayers"]:
+                out = x
+
         return self.final_act(out)

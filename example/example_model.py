@@ -47,18 +47,28 @@ class INR_hard_periodicity(INR):
     def forward(self, *args):
         xin = torch.cat(args, axis=1)
         xin = self.hard_period(xin)
-        xin = self.first(xin)
-        if self.hp.model["skip"]:
-            for i, layer in enumerate(self.mlp.model):
-                if layer.is_first:
-                    x = layer(xin)
-                elif layer.is_last:
-                    out = layer(x)
+        x = self.first(xin)
+
+        if self.hp.model["modified_mlp"]:
+            Ux = self.U(x)
+            Vx = self.V(x)
+        l_i = self.hp.model["hidden_nlayers"]
+        for i, layer in enumerate(self.mlp):
+            if i == 0 or i == l_i:
+                y = layer(x)
+            else:
+                if i % 2 == 1 and self.hp.model["skip"]:
+                    y = layer(x) + x
                 else:
-                    x = layer(x) + x if i % 2 == 1 else layer(x)
-        else:
-            out = self.mlp(xin)
-        # out = torch.squeeze(out)
+                    y = layer(x)
+
+            if self.hp.model["modified_mlp"] and i != l_i:
+                x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
+            else:
+                x = y
+            if i == self.hp.model["hidden_nlayers"]:
+                out = x
+
         return self.final_act(out)
 
 
