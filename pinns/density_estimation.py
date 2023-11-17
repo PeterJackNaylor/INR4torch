@@ -25,17 +25,6 @@ class RMSELoss(nn.Module):
         return loss
 
 
-def sum_loss(dic_values, dic_lambdas):
-    loss = 0.0
-    for key in dic_lambdas.keys():
-        loss += dic_lambdas[key][-1] * dic_values[key][-1]
-
-    if len(dic_values[list(dic_values.keys())[0]]) > 1:
-        for key in dic_lambdas.keys():
-            dic_values[key][-2] = dic_values[key][-2].detach().item()
-    return loss
-
-
 def checkpoint_values(dic_values, dic_tmp_values):
     for key in dic_values.keys():
         dic_values[key].append(torch.stack(dic_tmp_values[key]).mean().item())
@@ -152,6 +141,16 @@ class DensityEstimator:
         self.loss_fn = loss_fn
         self.test_scores = []
 
+    def sum_loss(self, dic_values, dic_lambdas):
+        loss = 0.0
+        for key in dic_lambdas.keys():
+            loss += dic_lambdas[key][-1] * dic_values[key][-1]
+
+        if len(dic_values[list(dic_values.keys())[0]]) > 1:
+            for key in dic_lambdas.keys():
+                dic_values[key][-2] = dic_values[key][-2].detach().item()
+        return loss
+
     def setup_temporal_causality(self):
         self.temporal_weights = {}
         for key in self.hp["losses"].keys():
@@ -204,7 +203,7 @@ class DensityEstimator:
     def loss_balancing(self):
         if self.hp.self_adapting_loss_balancing["status"]:
             f = self.hp.self_adapting_loss_balancing["step"]
-            if self.it != 1 and self.it % f == 0:
+            if self.it == 1 or self.it % f == 0:
                 alpha = self.hp.self_adapting_loss_balancing["alpha"]
                 balancing_loss(
                     self.loss_values,
@@ -216,7 +215,7 @@ class DensityEstimator:
                 )
         elif self.hp.relobralo["status"]:
             f = self.hp.relobralo["step"]
-            if self.it != 1 and self.it % f == 0:
+            if self.it == 1 or self.it % f == 0:
                 rho = self.hp.relobralo["rho"]
                 alpha = self.hp.relobralo["alpha"]
                 T = self.hp.relobralo["T"]
@@ -393,7 +392,7 @@ class DensityEstimator:
 
                 self.compute_loss(true_pred, target_pred)
                 self.loss_balancing()
-                loss = sum_loss(self.loss_values, self.lambdas_scalar)
+                loss = self.sum_loss(self.loss_values, self.lambdas_scalar)
             scaler.scale(loss).backward()
             # loss.backward()
             self.clip_gradients()
