@@ -303,11 +303,14 @@ class DensityEstimator:
         batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
 
         predictions = []
-        with torch.no_grad():
-            for i in self.range(0, self.n_test, bs, leave=False):
-                idx = batch_idx[i : (i + bs)]
-                pred = self.model(self.test_set.samples[idx])
-                predictions.append(pred)
+        with torch.autocast(
+            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+        ):
+            with torch.no_grad():
+                for i in self.range(0, self.n_test, bs, leave=False):
+                    idx = batch_idx[i : (i + bs)]
+                    pred = self.model(self.test_set.samples[idx])
+                    predictions.append(pred)
         return torch.cat(predictions)
 
     def write(self, text):
