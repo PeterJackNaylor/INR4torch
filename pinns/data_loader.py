@@ -33,11 +33,8 @@ class DataPlaceholder(Dataset):
 
         if self.need_target:
             self.targets = torch.from_numpy(targets)
-        if gpu:
-            self.send_cuda()
-            self.device = "cuda"
-        else:
-            self.device = "cpu"
+
+        self.setup_cuda(gpu)
         self.setup_batch_idx()
 
     def setup_data(self, pc):
@@ -45,10 +42,19 @@ class DataPlaceholder(Dataset):
         targets = pc[:, 1].astype(np.float32)
         return samples, targets
 
-    def send_cuda(self):
-        self.samples = self.samples.to("cuda")
+    def setup_cuda(self, gpu):
+        if gpu:
+            dtype = torch.float16
+            device = "cuda"
+        else:
+            dtype = torch.bfloat16
+            device = "cpu"
+
+        self.samples = self.samples.to(device, dtype=dtype)
         if self.need_target:
-            self.targets = self.targets.to("cuda")
+            self.targets = self.targets.to(device, dtype=dtype)
+        self.device = device
+        self.dtype = dtype
 
     def normalize(self, vector, nv, include_last=True):
         c = vector.shape[1]

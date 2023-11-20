@@ -16,7 +16,7 @@ model:
   ## RFF specific
   mapping_size: 256
   activation: tanh
-  modified_mlp: True #True # if you have a seperate encoder for the spatial and temporal inputs.
+  modified_mlp: False #True # if you have a seperate encoder for the spatial and temporal inputs.
   linear: HE # RWF # HE # Glorot # RWF RWF does not work with SIREN
   # RWF Specific
   mean: 1

@@ -36,8 +36,10 @@ def soft_periodicity(model, t):
 
 
 class Advection(pinns.DensityEstimator):
-    def pde(self, z, z_hat):
-        x = pinns.gen_uniform(self.hp.losses["pde"]["bs"], self.device)
+    def pde(self, z, z_hat, weight):
+        x = pinns.gen_uniform(
+            self.hp.losses["pde"]["bs"], self.device, dtype=self.dtype
+        )
 
         M = self.M if hasattr(self, "M") else None
         temporal_scheme = self.hp.losses["pde"]["temporal_causality"]
@@ -49,11 +51,13 @@ class Advection(pinns.DensityEstimator):
             end=1,
             temporal_scheme=temporal_scheme,
             M=M,
+            dtype=self.dtype,
         )
         residue = advection_residue(self.model, x, t, self.hp.c)
+
         return residue
 
-    def periodicity(self, z, z_hat):
+    def periodicity(self, z, z_hat, weight):
         M = self.M if hasattr(self, "M") else None
         temporal_scheme = self.hp.losses["periodicity"]["temporal_causality"]
 
@@ -64,11 +68,12 @@ class Advection(pinns.DensityEstimator):
             end=1,
             temporal_scheme=temporal_scheme,
             M=M,
+            dtype=self.dtype,
         )
         residue = soft_periodicity(self.model, t)
         return residue
 
-    def spatial_gradient(self, z, z_hat):
+    def spatial_gradient(self, z, z_hat, weight):
         x = pinns.gen_uniform(self.hp.losses["pde"]["bs"], self.device)
 
         M = self.M if hasattr(self, "M") else None
@@ -81,6 +86,7 @@ class Advection(pinns.DensityEstimator):
             end=1,
             temporal_scheme=temporal_scheme,
             M=M,
+            dtype=self.dtype,
         )
         grad = spatial_grad(self.model, x, t)
         return grad

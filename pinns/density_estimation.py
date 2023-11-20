@@ -14,15 +14,31 @@ def Norm2(vector, dim=None):
     return torch.norm(vector, p=2, dim=dim)
 
 
+class WL1Loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mae = nn.L1Loss()
+
+    def forward(self, yhat, y, weight=None):
+        if weight is None:
+            loss = self.mae(yhat, y)
+        else:
+            loss = torch.absolute(weight * (yhat - y)).mean()
+        return loss
+
+
 class RMSELoss(nn.Module):
     def __init__(self, eps=1e-6):
         super().__init__()
         self.mse = nn.MSELoss()
         self.eps = eps
 
-    def forward(self, yhat, y):
-        loss = torch.sqrt(self.mse(yhat, y) + self.eps)
-        return loss
+    def forward(self, yhat, y, weight=None):
+        if weight is None:
+            loss = self.mse(yhat, y)
+        else:
+            loss = (weight * (yhat - y) ** 2).mean()
+        return torch.sqrt(loss + self.eps)
 
 
 def checkpoint_values(dic_values, dic_tmp_values):
@@ -124,7 +140,7 @@ class DensityEstimator:
             if key == "mse":
                 loss_fn[key] = RMSELoss()
             elif key == "mae":
-                loss_fn[key] = nn.L1Loss()
+                loss_fn[key] = WL1Loss()
             else:
                 if "method" in self.hp.losses[key]:
                     loss_computation_fn = getattr(self, self.hp.losses[key]["method"])
@@ -164,8 +180,8 @@ class DensityEstimator:
                     self.eps = self.hp.temporal_causality["eps"]
 
     def temporal_loss(self, key, residue_computation, bs_loss):
-        def f(z, zhat):
-            residue = residue_computation(z, zhat)
+        def f(z, zhat, weight=None):
+            residue = residue_computation(z, zhat, weight)
             square_res = residue.reshape(self.M, bs_loss // self.M)
             M_losses = Norm2(square_res, dim=1)
             f = self.hp.temporal_causality["step"]
@@ -184,13 +200,13 @@ class DensityEstimator:
 
         return f
 
-    def compute_loss(self, z, zhat):
+    def compute_loss(self, z, zhat, weight=None):
         for key in self.hp.losses.keys():
-            self.loss_values[key].append(self.loss_fn[key](z, zhat))
+            self.loss_values[key].append(self.loss_fn[key](z, zhat, weight))
 
     def standard_loss(self, key, residue_computation, bs_loss):
-        def f(z, zhat):
-            residue = residue_computation(z, zhat).flatten()
+        def f(z, zhat, weight=None):
+            residue = residue_computation(z, zhat, weight).flatten()
             loss = Norm2(residue) / (residue.shape[0]) ** 0.5
             return loss
 
@@ -393,7 +409,6 @@ class DensityEstimator:
             ):
                 target_pred = self.model(data_batch[0])
                 true_pred = data_batch[1]
-
                 self.compute_loss(true_pred, target_pred)
                 self.loss_balancing()
                 loss = self.sum_loss(self.loss_values, self.lambdas_scalar)

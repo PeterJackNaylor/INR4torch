@@ -52,9 +52,6 @@ class XT(pinns.DataPlaceholder):
 
         if self.need_target:
             self.targets = torch.from_numpy(targets)
-        if gpu:
-            self.send_cuda()
-            self.device = "cuda"
-        else:
-            self.device = "cpu"
+
+        self.setup_cuda(gpu)
         self.setup_batch_idx()
