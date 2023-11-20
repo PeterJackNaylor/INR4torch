@@ -8,7 +8,7 @@ c: 5
 
 #Models
 model:
-  name: RFF #or RFF/SIREN/WIRES
+  name: SIREN #or RFF/SIREN/WIRES
   hidden_nlayers: 4
   hidden_width: 256
   scale: 1

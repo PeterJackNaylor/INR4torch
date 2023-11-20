@@ -53,7 +53,7 @@ class INR_hard_periodicity(INR):
             Ux = self.U(x)
             Vx = self.V(x)
         l_i = self.hp.model["hidden_nlayers"]
-        for i, layer in enumerate(self.mlp):
+        for i, layer in enumerate(self.layer_iterator()):
             if i == 0 or i == l_i:
                 y = layer(x)
             else:
