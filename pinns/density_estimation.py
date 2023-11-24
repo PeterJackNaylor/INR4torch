@@ -144,14 +144,18 @@ class DensityEstimator:
             else:
                 if "method" in self.hp.losses[key]:
                     loss_computation_fn = getattr(self, self.hp.losses[key]["method"])
+                    try:
+                        penalty_fn = getattr(self, self.hp.losses[key]["penalty"])
+                    except:
+                        penalty_fn = self.L2
                     bs_loss = self.hp.losses[key]["bs"]
                     if self.hp.losses[key]["temporal_causality"]:
                         loss_fn[key] = self.temporal_loss(
-                            key, loss_computation_fn, bs_loss
+                            key, loss_computation_fn, bs_loss, penalty_fn
                         )
                     else:
                         loss_fn[key] = self.standard_loss(
-                            key, loss_computation_fn, bs_loss
+                            key, loss_computation_fn, bs_loss, penalty_fn
                         )
             loss_values[key] = []
         self.lambdas_scalar = lambdas
@@ -179,11 +183,11 @@ class DensityEstimator:
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
-    def temporal_loss(self, key, residue_computation, bs_loss):
+    def temporal_loss(self, key, residue_computation, bs_loss, penalty):
         def f(z, zhat, weight=None):
             residue = residue_computation(z, zhat, weight)
             square_res = residue.reshape(self.M, bs_loss // self.M)
-            M_losses = Norm2(square_res, dim=1)
+            M_losses = penalty(square_res, dim=1, normed=False)
             f = self.hp.temporal_causality["step"]
             if self.it == 1 or (self.it - 1) % f == 0:
                 shifted_M_loss = torch.zeros_like(M_losses)
@@ -204,10 +208,26 @@ class DensityEstimator:
         for key in self.hp.losses.keys():
             self.loss_values[key].append(self.loss_fn[key](z, zhat, weight))
 
-    def standard_loss(self, key, residue_computation, bs_loss):
+    def L1(self, vector, normed=True, dim=None):
+        result = Norm1(vector, dim=dim)
+        if normed:
+            if dim is None:
+                dim = 0
+            result = result / vector.shape[dim]
+        return result
+
+    def L2(self, vector, normed=True, dim=None):
+        result = Norm2(vector, dim=dim)
+        if normed:
+            if dim is None:
+                dim = 0
+            result = result / (vector.shape[dim]) ** 0.5
+        return result
+
+    def standard_loss(self, key, residue_computation, bs_loss, penalty):
         def f(z, zhat, weight=None):
             residue = residue_computation(z, zhat, weight).flatten()
-            loss = Norm2(residue) / (residue.shape[0]) ** 0.5
+            loss = penalty(residue, normed=True)
             return loss
 
         return f

@@ -37,6 +37,7 @@ losses:
     bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
     method: pde
     loss_balancing: True #wether to be included in loss balancing
+    penalty: L2
   # periodicity:
   #   report: False
   #   lambda: 1.e-1
