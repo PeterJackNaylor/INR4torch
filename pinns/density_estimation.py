@@ -322,9 +322,12 @@ class DensityEstimator:
     def predict_test(self):
         predictions = self.test_loop()
         loss_fn = self.loss_fn[self.hp.validation_loss]
-        test_loss = loss_fn(
-            predictions, self.test_set.targets[: predictions.shape[0]]
-        ).item()
+        with torch.autocast(
+            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+        ):
+            test_loss = loss_fn(
+                predictions, self.test_set.targets[: predictions.shape[0]]
+            ).item()
         if self.hp.verbose:
             self.write(f"[{self.it}/{self.hp.max_iters}] Test Error: {test_loss:>4f}")
         return test_loss
@@ -370,6 +373,7 @@ class DensityEstimator:
     def early_stop(self, it, loss, break_loop):
         if torch.isnan(loss):
             break_loop = True
+            print("Loss has become NaN, stopping...")
         if self.hp.early_stopping["status"]:
             if it != 1 and it % self.hp.test_frequency == 0:
                 patience = self.hp.early_stopping["patience"]
@@ -380,17 +384,21 @@ class DensityEstimator:
                     other_scores = np.array(self.test_scores[-patience + 1 :])
                     if (ref + threshold - other_scores < 0).all():
                         break_loop = True
+                        print("Early stopping")
         return break_loop
 
     def autocasting(self):
         if self.device == "cpu":
-            use_amp = False
             dtype = torch.bfloat16
         else:
-            use_amp = True
             dtype = torch.float16
-        self.use_amp = use_amp
+        self.use_amp = True
         self.dtype = dtype
+
+    def load_best_model(self):
+        self.model.load_state_dict(
+            torch.load(self.hp.pth_name, map_location=self.device)
+        )
 
     def fit(self):
         self.autocasting()
@@ -403,6 +411,7 @@ class DensityEstimator:
         self.best_test_score = np.inf
 
         iterators = self.range(1, self.hp.max_iters + 1, 1)
+
         for self.it in iterators:
             self.optimizer.zero_grad()
 
@@ -436,3 +445,4 @@ class DensityEstimator:
             if break_loop:
                 break
         self.convert_last_loss_value()
+        self.load_best_model()

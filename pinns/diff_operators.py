@@ -42,13 +42,13 @@ def divergence(y, x):
     return div
 
 
-def gradient(y, x, grad_outputs=None, allow_unused=True):
+def gradient(y, x, grad_outputs=None, create_graph=True, allow_unused=False):
     grad_outputs = torch.ones_like(y)
     grad = torch.autograd.grad(
         y,
         [x],
         grad_outputs=grad_outputs,
-        create_graph=True,
+        create_graph=create_graph,
         allow_unused=allow_unused,
         materialize_grads=allow_unused,
     )[0]

@@ -212,4 +212,5 @@ example/plots
 example/*.npz
 example/*.pth
 example/multiple/
+example/log
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,visualstudiocode
