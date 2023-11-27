@@ -94,6 +94,7 @@ class DensityEstimator:
         self.hp = model_hp
         self.device = "cuda" if gpu else "cpu"
         self.trial = trial
+        self.autocasting()
 
     def setup_optimizer(self):
         self.optimizer = torch.optim.Adam(
@@ -421,7 +422,7 @@ class DensityEstimator:
         )
 
     def fit(self):
-        self.autocasting()
+
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
