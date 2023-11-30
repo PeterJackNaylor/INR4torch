@@ -1,12 +1,18 @@
 import numpy as np
+import torch
 
-# from .data_XYTZ import return_dataset
 from .models import gen_b
 
-# from .util_train import estimate_density
 
-
-def train(hp, estimate_density_cl, dataset_fn, model_cl, trial=None, gpu=False):
+def train(
+    hp,
+    estimate_density_cl,
+    dataset_fn,
+    model_cl,
+    initial_weights=None,
+    trial=None,
+    gpu=False,
+):
     train, test = dataset_fn(hp, gpu=gpu)
 
     hp.input_size = train.input_size
@@ -28,12 +34,10 @@ def train(hp, estimate_density_cl, dataset_fn, model_cl, trial=None, gpu=False):
 
     if gpu:
         model = model.cuda()
-    # import torch
-    # model = torch.compile(model)
     NN = estimate_density_cl(train, test, model, hp, gpu, trial=trial)
-    # with torch.profiler.profile():
+    if initial_weights:
+        NN.model.load_state_dict(torch.load(NN.hp.pth_name, map_location=NN.device))
     NN.fit()
-    # torch.profiler.export_chrome_trace('profile.json')
 
     if "B" in hp.keys():
         hp.B = np.array(hp.B.cpu())
