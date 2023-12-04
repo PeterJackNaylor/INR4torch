@@ -62,12 +62,6 @@ temporal_causality:
   eps: 8.e-3
   step: 1 #update
 
-regularisation:
-  L1:
-    bs: 8192
-    method: L1
-    scalar: 1.e-1
-    temporal_causality: True
 
 # Loss balancing
 relobralo:
