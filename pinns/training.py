@@ -36,7 +36,7 @@ def train(
         model = model.cuda()
     NN = estimate_density_cl(train, test, model, hp, gpu, trial=trial)
     if initial_weights:
-        NN.model.load_state_dict(torch.load(NN.hp.pth_name, map_location=NN.device))
+        NN.model.load_state_dict(torch.load(initial_weights, map_location=NN.device))
     NN.fit()
 
     if "B" in hp.keys():
