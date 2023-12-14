@@ -19,11 +19,13 @@ class WL1Loss(nn.Module):
         super().__init__()
         self.mae = nn.L1Loss()
 
-    def forward(self, yhat, y, weight=None):
-        if weight is None:
-            loss = self.mae(yhat, y)
+    def forward(self, zhat, z, **args_dic):
+
+        if "weight" not in args_dic:
+            loss = self.mae(zhat, z)
         else:
-            loss = torch.absolute(weight * (yhat - y)).mean()
+            weight = args_dic["weight"]
+            loss = torch.absolute(weight * (zhat - z)).mean()
         return loss
 
 
@@ -33,11 +35,12 @@ class RMSELoss(nn.Module):
         self.mse = nn.MSELoss()
         self.eps = eps
 
-    def forward(self, yhat, y, weight=None):
-        if weight is None:
-            loss = self.mse(yhat, y)
+    def forward(self, zhat, z, **args_dic):
+        if "weight" not in args_dic:
+            loss = self.mse(zhat, z)
         else:
-            loss = (weight * (yhat - y) ** 2).mean()
+            weight = args_dic["weight"]
+            loss = (weight * (zhat - z) ** 2).mean()
         return torch.sqrt(loss + self.eps)
 
 
@@ -184,8 +187,30 @@ class DensityEstimator:
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
+    def temporal_loss_data_fit(self, key, residue_computation, bs_loss, penalty):
+        def f(zhat, z, weight=None, groups=None, **args_dic):
+            residue = residue_computation(z, zhat, weight)
+            M_losses = torch.zeros(self.M)
+            for i in range(self.M):
+                M_losses[i] = penalty(residue[groups == i], normed=True)
+            f = self.hp.temporal_causality["step"]
+            if self.it == 1 or (self.it - 1) % f == 0:
+                shifted_M_loss = torch.zeros_like(M_losses)
+                shifted_M_loss[1:] = M_losses[:-1]
+                w_i = torch.exp(
+                    -self.eps * torch.cumsum(shifted_M_loss, dim=0)
+                ).detach()
+                w_i.requires_grad_(False)
+                self.temporal_weights[key].append(w_i)
+            else:
+                w_i = self.temporal_weights[key][-1]
+            loss = torch.mean(w_i * M_losses)
+            return loss
+
+        return f
+
     def temporal_loss(self, key, residue_computation, bs_loss, penalty):
-        def f(z, zhat, weight=None):
+        def f(zhat, z, weight=None, **args_dic):
             residue = residue_computation(z, zhat, weight)
             square_res = residue.reshape(self.M, bs_loss // self.M)
             M_losses = penalty(square_res, dim=1, normed=False)
@@ -205,9 +230,9 @@ class DensityEstimator:
 
         return f
 
-    def compute_loss(self, z, zhat, weight=None):
+    def compute_loss(self, zhat, **args_dic):
         for key in self.hp.losses.keys():
-            self.loss_values[key].append(self.loss_fn[key](z, zhat, weight))
+            self.loss_values[key].append(self.loss_fn[key](zhat, **args_dic))
 
     def L1(self, vector, normed=True, dim=None):
         result = Norm1(vector, dim=dim)
@@ -226,7 +251,7 @@ class DensityEstimator:
         return result
 
     def standard_loss(self, key, residue_computation, bs_loss, penalty):
-        def f(z, zhat, weight=None):
+        def f(zhat, z, weight=None, **args_dict):
             residue = residue_computation(z, zhat, weight).flatten()
             loss = penalty(residue, normed=True)
             return loss
@@ -440,9 +465,8 @@ class DensityEstimator:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype, enabled=self.use_amp
             ):
-                target_pred = self.model(data_batch[0])
-                true_pred = data_batch[1]
-                self.compute_loss(true_pred, target_pred)
+                target_pred = self.model(data_batch["x"])
+                self.compute_loss(target_pred, **data_batch)
                 self.loss_balancing()
                 loss = self.sum_loss(self.loss_values, self.lambdas_scalar)
             scaler.scale(loss).backward()

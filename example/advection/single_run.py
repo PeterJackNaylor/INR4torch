@@ -11,7 +11,7 @@ from example_pde_model import Advection
 from example_model import return_model_advection as model
 
 torch.set_float32_matmul_precision("high")
-model_hp = pinns.read_yaml("../default-parameters.yml")
+model_hp = pinns.read_yaml("../../default-parameters.yml")
 c = model_hp.c
 real_u, real_t, real_x = get_dataset(c=c, n_t=200, n_x=128)
 gpu = torch.cuda.is_available()
