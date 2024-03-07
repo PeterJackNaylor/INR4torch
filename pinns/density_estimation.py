@@ -265,7 +265,9 @@ class DensityEstimator:
         return iterator_fn(start, end, step)
 
     def loss_balancing(self):
-        if self.hp.self_adapting_loss_balancing["status"]:
+        if len(self.lambdas_scalar.keys()) == 1:
+            pass
+        elif self.hp.self_adapting_loss_balancing["status"]:
             f = self.hp.self_adapting_loss_balancing["step"]
             if self.it == 1 or self.it % f == 0:
                 alpha = self.hp.self_adapting_loss_balancing["alpha"]

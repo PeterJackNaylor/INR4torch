@@ -213,4 +213,12 @@ example/*.npz
 example/*.pth
 example/multiple/
 example/log
+example/*/run_outputs
+example/*/data
+example/*/log
+example/*/multiple
+**.npz
+**.pth
+**/plots
+example/QG/pyqg_out/
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,visualstudiocode

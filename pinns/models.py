@@ -119,6 +119,7 @@ class SIREN_model(nn.Module):
         width_layers,
         features_scales,
         linear_f,
+        skip=False,
     ):
         super(SIREN_model, self).__init__()
         self.hidden_width = width_layers
@@ -129,13 +130,25 @@ class SIREN_model(nn.Module):
         )
         other_layers = []
         for dim0, dim1 in zip(model_dim[1:-2], model_dim[2:-1]):
-            other_layers.append(SirenLayer(dim0, dim1, linear_f))
+            layer = SirenLayer(dim0, dim1, linear_f)
+            if skip:
+                layer = skip_layer(layer)
+            other_layers.append(layer)
             # other_layers.append(nn.LayerNorm(dim1))
         final_layer = SirenLayer(model_dim[-2], model_dim[-1], linear_f, is_last=True)
         self.model = nn.Sequential(first_layer, *other_layers, final_layer)
 
     def forward(self, xin):
         return self.model(xin)
+
+
+class skip_layer(nn.Module):
+    def __init__(self, layer):
+        super(skip_layer, self).__init__()
+        self.layer = layer
+
+    def forward(self, x):
+        return x + self.layer(x)
 
 
 class INR(nn.Module):
@@ -213,15 +226,18 @@ class INR(nn.Module):
     def gen_rff(self):
         linear_layer_fn = linear_fn(self.hp.model["linear"], self.hp)
         layers = []
-        for i in range(self.hp.model["hidden_nlayers"]):
-            if i == 0:
-                width_i = self.input_size
-            else:
-                width_i = self.hp.model["hidden_width"]
+        width_std = self.hp.model["hidden_width"]
+        layer_width = [self.input_size] + [
+            width_std for i in range(self.hp.model["hidden_nlayers"] - 1)
+        ]
 
+        for i, width_i in enumerate(layer_width):
             layer = nn.Sequential(
                 linear_layer_fn(width_i, self.hp.model["hidden_width"]), self.act()
             )
+            if self.hp.model["skip"] and i != 0:
+                layer = skip_layer(layer)
+
             layers.append(layer)
 
         layer = nn.Sequential(
@@ -245,14 +261,10 @@ class INR(nn.Module):
             Ux = self.U(x)
             Vx = self.V(x)
         l_i = self.hp.model["hidden_nlayers"]
+
         for i, layer in enumerate(self.layer_iterator()):
             if i == 0 or i == l_i:
                 y = layer(x)
-            else:
-                if i % 2 == 1 and self.hp.model["skip"]:
-                    y = layer(x) + x
-                else:
-                    y = layer(x)
 
             if self.hp.model["modified_mlp"] and i != l_i:
                 x = torch.mul(Ux, y) + torch.mul(Vx, 1 - y)
