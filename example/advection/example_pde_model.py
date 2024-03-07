@@ -74,13 +74,13 @@ class Advection(pinns.DensityEstimator):
         return residue
 
     def spatial_gradient(self, z, z_hat, weight):
-        x = pinns.gen_uniform(self.hp.losses["pde"]["bs"], self.device)
+        x = pinns.gen_uniform(self.hp.losses["spatial_grad"]["bs"], self.device)
 
         M = self.M if hasattr(self, "M") else None
-        temporal_scheme = self.hp.losses["pde"]["temporal_causality"]
+        temporal_scheme = self.hp.losses["spatial_grad"]["temporal_causality"]
 
         t = pinns.gen_uniform(
-            self.hp.losses["pde"]["bs"],
+            self.hp.losses["spatial_grad"]["bs"],
             self.device,
             start=0,
             end=1,
