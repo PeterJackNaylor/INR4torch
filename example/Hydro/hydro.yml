@@ -1,48 +1,50 @@
 #training
-max_iters: 10000 #00 #180 #00
+max_iters: 2000 #00 #180 #00
 normalise_targets: True
-test_frequency: 1000 # 1000
+normalise_margin: 0.05
+test_frequency: 10 # 1000
+ignore_nan: True
 save_model: True
-hard_periodicity: True
-c: 80
+bassin: 0 # araguaiana 0 , barra 1 , caracarai 2 , conceicao 3, obidos 4 , bom 5 , all 6
+p: 0.8
+individual_loss: True # False
+method: # None, linear_combination, mse
+
 
 #Models
 model:
-  name: MFN #or RFF/SIREN/WIRES/MFN
+  name: RFF #or RFF/SIREN/WIRES
   hidden_nlayers: 4
   hidden_width: 256
-  scale: 20 #for SIREN: 30
+  scale: 1
   skip: False
   ## RFF specific
-  mapping_size: 256
+  mapping_size: 128
   activation: tanh
-  modified_mlp: False #True # if you have a seperate encoder for the spatial and temporal inputs.
-  linear: HE # RWF # HE # Glorot # RWF Glorot does not work with SIREN
+  modified_mlp: True #True # if you have a seperate encoder for the spatial and temporal inputs.
+  linear: HE # RWF # HE # Glorot # RWF RWF does not work with SIREN
   # RWF Specific
   mean: 1
   std: 0.1
-  # WIRES Specific
-  omega0: 10
-  sigma0: 40
-  trainable: True
-
 
 # Lambda values in the loss
 validation_loss: mse
 losses:
   mse:
     report: True
-    bs: 64
+    bs: 16
     loss_balancing: True #wether to be included in loss balancing
+    multiple_outputs: True
+    ignore_nan: True
   pde:
     report: True
-    log: True
-    lambda: 1.e-1
+    log: False
+    lambda: 1.e+1
     temporal_causality: True
-    bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+    bs: 1024 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
     method: pde
     loss_balancing: True #wether to be included in loss balancing
-    penalty: L2
+    penalty: L1
   # periodicity:
   #   report: False
   #   lambda: 1.e-1
@@ -63,8 +65,8 @@ losses:
 
 # learning schemes
 temporal_causality:
-  M: 32 # powers of 2 only
-  eps: 1.e-2
+  M: 4 # powers of 2 only
+  eps: 1.e+0
   step: 1 #update
 
 
@@ -78,8 +80,8 @@ relobralo:
 
 self_adapting_loss_balancing:
   status: True
-  alpha: 0.9
-  step: 1000 #1000 #update
+  alpha: 0.90
+  step: 100 #1000 #update
 
 
 early_stopping:
@@ -89,15 +91,14 @@ early_stopping:
   value: 0.0001
 
 # optimizers
-optimizer: AdamW
-lr: 1.e-4
+lr: 1.e-3
 eps: 1.e-8 #adam precision
 clip_gradients: True
 
 learning_rate_decay:
   status: True
-  step: 2000
-  gamma: 0.98 # 0.9
+  step: 200
+  gamma: 0.94 # 0.9
 
 cosine_anealing:
   status: False

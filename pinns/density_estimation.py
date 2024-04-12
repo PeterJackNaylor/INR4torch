@@ -15,7 +15,7 @@ def Norm2(vector, dim=None):
 
 
 class WL1Loss(nn.Module):
-    def __init__(self):
+    def __init__(self, ignore_nan=False):
         super().__init__()
         self.mae = nn.L1Loss()
 
@@ -30,17 +30,46 @@ class WL1Loss(nn.Module):
 
 
 class RMSELoss(nn.Module):
-    def __init__(self, eps=1e-6):
+    def __init__(self, eps=1e-6, column=None, ignore_nan=False):
         super().__init__()
-        self.mse = nn.MSELoss()
+        mean_f = torch.mean if not ignore_nan else torch.nanmean
+        if not ignore_nan:
+            def mse(yhat, y):
+                return mean_f((yhat - y) ** 2)
+            def wmse(yhat, y, w):
+                return mean_f(w * (yhat - y) ** 2)
+        else:
+            def mse(yhat, y):
+                nan = torch.isnan(y)
+                y = torch.where(nan, torch.tensor(0.0), y)
+                return mean_f((yhat - y) ** 2)
+            def wmse(yhat, y, w):
+                nan = torch.isnan(y)
+                y = torch.where(nan, torch.tensor(0.0), y)
+                return mean_f(w * (yhat - y) ** 2)
+
+        self.mse = mse
+        self.wmse = wmse
         self.eps = eps
+        self.column = column
 
     def forward(self, zhat, z, **args_dic):
+        if self.column is not None:
+            zhat = zhat[:, self.column]
+            z = z[:, self.column]
         if "weight" not in args_dic:
             loss = self.mse(zhat, z)
         else:
             weight = args_dic["weight"]
-            loss = (weight * (zhat - z) ** 2).mean()
+            if weight is None:
+                loss = self.mse(zhat, z)
+            else:
+                loss = self.wmse(zhat, z, weight)
+
+        # if torch.isnan(zhat).sum() >0:
+        #     import pdb; pdb.set_trace()
+        # if torch.isnan(z).sum() >0:
+        #     import pdb; pdb.set_trace()
         return torch.sqrt(loss + self.eps)
 
 
@@ -67,8 +96,8 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
         if lambdas[k][-1] != 0:
             loss_k = loss_values[k][-1]
             loss_k.backward(retain_graph=True)
-            grad_loss_k = [p.flatten().clone() for p in model_params_data(model, hp)]
-            grad_norms[k] = Norm2(torch.cat(grad_loss_k))
+            grad_loss_k = torch.cat([p.flatten().clone() for p in model_params_data(model, hp)])
+            grad_norms[k] = Norm2(grad_loss_k)
             if device != "cpu":
                 grad_norms[k] = grad_norms[k].cpu()
             grad_norms[k] = grad_norms[k]
@@ -79,12 +108,14 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
     summed_grads = np.sum(list(grad_norms.values()))
     for k in keys:
         if lambdas[k][-1] != 0:
-            new_val = (summed_grads / grad_norms[k]).item()
-            new_val = lambdas[k][-1] * alpha + new_val * (1 - alpha)
+            if grad_norms[k] == 0:
+                new_val = lambdas[k][-1]
+            else:
+                new_val = (summed_grads / grad_norms[k]).item()
+                new_val = lambdas[k][-1] * alpha + new_val * (1 - alpha)
         else:
             new_val = 0
         lambdas[k].append(new_val)
-
 
 class DensityEstimator:
     def __init__(self, train, test, model, model_hp, gpu, trial=None):
@@ -92,6 +123,7 @@ class DensityEstimator:
         self.test_set = test
         self.n = len(train)
         self.n_test = len(test)
+        self.n_outputs = self.data.output_size
 
         self.model = model
         self.hp = model_hp
@@ -100,11 +132,20 @@ class DensityEstimator:
         self.autocasting()
 
     def setup_optimizer(self):
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=self.hp.lr,
-            eps=self.hp.eps,
-        )
+        if self.hp.optimizer == "Adam":
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(),
+                lr=self.hp.lr,
+                eps=self.hp.eps,
+            )
+        elif self.hp.optimizer == "AdamW":
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(),
+                lr=self.hp.lr,
+                eps=self.hp.eps,
+            )
+        else:
+            print("")
 
     def setup_scheduler(self):
         scheduler_status = True
@@ -135,6 +176,20 @@ class DensityEstimator:
         lambdas = {}
         loss_values = {}
         loss_fn = {}
+        if self.n_outputs > 1:
+            key_list = list(self.hp.losses.keys())
+            for key in key_list:
+                if "multiple_outputs" in self.hp.losses[key].keys():
+                    if self.hp.losses[key]["multiple_outputs"]:
+                        for i in range(self.n_outputs):
+                            self.hp.losses[f"{key}_{i}"] = self.hp.losses[key].copy()
+                            self.hp.losses[f"{key}_{i}"]["method"] = f"{key}_{i}"
+                            
+                            setattr(self, f"{key}_{i}", RMSELoss(column=i, ignore_nan=self.hp.losses[key]["ignore_nan"]))
+                    del self.hp.losses[key]
+                else:
+                    self.hp.losses[key]["multiple_outputs"] = False
+
 
         for key in self.hp.losses.keys():
             if "lambda" in self.hp.losses[key]:
@@ -142,7 +197,9 @@ class DensityEstimator:
             else:
                 lambdas[key] = [1]
             if key == "mse":
-                loss_fn[key] = RMSELoss()
+                if "ignore_nan" not in self.hp.losses[key].keys():
+                    self.hp.losses[key]["ignore_nan"] = False
+                loss_fn[key] = RMSELoss(ignore_nan=self.hp.losses[key]["ignore_nan"])
             elif key == "mae":
                 loss_fn[key] = WL1Loss()
             else:
@@ -153,6 +210,8 @@ class DensityEstimator:
                     except:
                         penalty_fn = self.L2
                     bs_loss = self.hp.losses[key]["bs"]
+                    if "temporal_causality" not in self.hp.losses[key].keys():
+                        self.hp.losses[key]["temporal_causality"] = False
                     if self.hp.losses[key]["temporal_causality"]:
                         loss_fn[key] = self.temporal_loss(
                             key, loss_computation_fn, bs_loss, penalty_fn
@@ -164,6 +223,8 @@ class DensityEstimator:
             loss_values[key] = []
         self.lambdas_scalar = lambdas
         self.loss_values = loss_values
+        # for key in self.hp.losses.keys():
+        #     loss_fn[key] = torch.compile(loss_fn[key])
         self.loss_fn = loss_fn
         self.test_scores = []
 
@@ -187,27 +248,27 @@ class DensityEstimator:
                     self.M = M
                     self.eps = self.hp.temporal_causality["eps"]
 
-    def temporal_loss_data_fit(self, key, residue_computation, bs_loss, penalty):
-        def f(zhat, z, weight=None, groups=None, **args_dic):
-            residue = residue_computation(z, zhat, weight)
-            M_losses = torch.zeros(self.M)
-            for i in range(self.M):
-                M_losses[i] = penalty(residue[groups == i], normed=True)
-            f = self.hp.temporal_causality["step"]
-            if self.it == 1 or (self.it - 1) % f == 0:
-                shifted_M_loss = torch.zeros_like(M_losses)
-                shifted_M_loss[1:] = M_losses[:-1]
-                w_i = torch.exp(
-                    -self.eps * torch.cumsum(shifted_M_loss, dim=0)
-                ).detach()
-                w_i.requires_grad_(False)
-                self.temporal_weights[key].append(w_i)
-            else:
-                w_i = self.temporal_weights[key][-1]
-            loss = torch.mean(w_i * M_losses)
-            return loss
+    # def temporal_loss_data_fit(self, key, residue_computation, bs_loss, penalty):
+    #     def f(zhat, z, weight=None, groups=None, **args_dic):
+    #         residue = residue_computation(z, zhat, weight)
+    #         M_losses = torch.zeros(self.M)
+    #         for i in range(self.M):
+    #             M_losses[i] = penalty(residue[groups == i], normed=True)
+    #         f = self.hp.temporal_causality["step"]
+    #         if self.it == 1 or (self.it - 1) % f == 0:
+    #             shifted_M_loss = torch.zeros_like(M_losses)
+    #             shifted_M_loss[1:] = M_losses[:-1]
+    #             w_i = torch.exp(
+    #                 -self.eps * torch.cumsum(shifted_M_loss, dim=0)
+    #             ).detach()
+    #             w_i.requires_grad_(False)
+    #             self.temporal_weights[key].append(w_i)
+    #         else:
+    #             w_i = self.temporal_weights[key][-1]
+    #         loss = torch.mean(w_i * M_losses)
+    #         return loss
 
-        return f
+    #     return f
 
     def temporal_loss(self, key, residue_computation, bs_loss, penalty):
         def f(zhat, z, weight=None, **args_dic):
@@ -215,16 +276,17 @@ class DensityEstimator:
             square_res = residue.reshape(self.M, bs_loss // self.M)
             M_losses = penalty(square_res, dim=1, normed=False)
             f = self.hp.temporal_causality["step"]
-            if self.it == 1 or (self.it - 1) % f == 0:
-                shifted_M_loss = torch.zeros_like(M_losses)
-                shifted_M_loss[1:] = M_losses[:-1]
-                w_i = torch.exp(
-                    -self.eps * torch.cumsum(shifted_M_loss, dim=0)
-                ).detach()
-                w_i.requires_grad_(False)
-                self.temporal_weights[key].append(w_i)
-            else:
-                w_i = self.temporal_weights[key][-1]
+            with torch.no_grad():
+                if self.it == 1 or (self.it - 1) % f == 0:
+                    shifted_M_loss = torch.zeros_like(M_losses)
+                    shifted_M_loss[1:] = M_losses[:-1]
+                    w_i = torch.exp(
+                        -self.eps * torch.cumsum(shifted_M_loss, dim=0)
+                    )
+                    w_i.requires_grad_(False)
+                    self.temporal_weights[key].append(w_i)
+                else:
+                    w_i = self.temporal_weights[key][-1]
             loss = torch.mean(w_i * M_losses)
             return loss
 
@@ -252,10 +314,9 @@ class DensityEstimator:
 
     def standard_loss(self, key, residue_computation, bs_loss, penalty):
         def f(zhat, z, weight=None, **args_dict):
-            residue = residue_computation(z, zhat, weight).flatten()
+            residue = residue_computation(zhat, z, weight=weight).flatten()
             loss = penalty(residue, normed=True)
             return loss
-
         return f
 
     def range(self, start, end, step, leave=True):
@@ -270,11 +331,10 @@ class DensityEstimator:
         elif self.hp.self_adapting_loss_balancing["status"]:
             f = self.hp.self_adapting_loss_balancing["step"]
             if self.it == 1 or self.it % f == 0:
-                alpha = self.hp.self_adapting_loss_balancing["alpha"]
                 balancing_loss(
                     self.loss_values,
                     self.lambdas_scalar,
-                    alpha,
+                    self.hp.self_adapting_loss_balancing["alpha"],
                     self.model,
                     self.hp,
                     self.device,
@@ -351,14 +411,14 @@ class DensityEstimator:
         batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
 
         predictions = []
-        with torch.autocast(
-            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-        ):
-            with torch.no_grad():
-                for i in self.range(0, self.n_test, bs, leave=False):
-                    idx = batch_idx[i : (i + bs)]
-                    pred = self.model(self.test_set.samples[idx])
-                    predictions.append(pred)
+        # with torch.no_grad():
+            # with torch.autocast(
+            #     device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+            # ):
+        for i in self.range(0, self.n_test, bs, leave=False):
+            idx = batch_idx[i : (i + bs)]
+            pred = self.model(self.test_set.samples[idx])
+            predictions.append(pred)
         return torch.cat(predictions)
 
     def write(self, text):
@@ -368,11 +428,13 @@ class DensityEstimator:
             print(text)
 
     def predict_test(self):
-        predictions = self.test_loop()
-        loss_fn = self.loss_fn[self.hp.validation_loss]
-        with torch.autocast(
-            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-        ):
+        with torch.no_grad():
+            predictions = self.test_loop()
+            loss_fn = self.loss_fn[self.hp.validation_loss]
+            # with torch.autocast(
+            #     device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+            # ):
+            # with torch.no_grad():
             test_loss = loss_fn(
                 predictions, self.test_set.targets[: predictions.shape[0]]
             ).item()
@@ -441,6 +503,8 @@ class DensityEstimator:
         else:
             dtype = torch.float16
         self.use_amp = True
+        if self.hp.model["name"] == "WIRES":
+            self.use_amp = False
         self.dtype = dtype
 
     def load_best_model(self):
@@ -448,12 +512,19 @@ class DensityEstimator:
             torch.load(self.hp.pth_name, map_location=self.device)
         )
 
-    def fit(self):
+    def setup_validation_loss(self):
+        if self.hp.validation_loss not in self.loss_fn:
+            if self.hp.validation_loss == "mse":
+                self.loss_fn[self.hp.validation_loss] = RMSELoss(ignore_nan=self.hp.ignore_nan)
+            elif self.hp.validation_loss == "mae":
+                self.loss_fn[self.hp.validation_loss] = WL1Loss()
 
+    def fit(self):
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
         self.setup_losses()
+        self.setup_validation_loss()
         self.setup_temporal_causality()
         self.model.train()
         self.best_test_score = np.inf
@@ -461,7 +532,7 @@ class DensityEstimator:
         iterators = self.range(1, self.hp.max_iters + 1, 1)
 
         for self.it in iterators:
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
 
             data_batch = next(self.data)
             with torch.autocast(
@@ -472,10 +543,8 @@ class DensityEstimator:
                 self.loss_balancing()
                 loss = self.sum_loss(self.loss_values, self.lambdas_scalar)
             scaler.scale(loss).backward()
-            # loss.backward()
             self.clip_gradients()
 
-            # self.optimizer.step()
             scaler.step(self.optimizer)
             scale = scaler.get_scale()
             scaler.update()

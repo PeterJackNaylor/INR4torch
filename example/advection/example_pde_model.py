@@ -12,7 +12,6 @@ def advection_residue(model, x, t, c=1):
 
     du_dx = pinns.gradient(u, x)
     du_dt = pinns.gradient(u, t)
-
     # the pi is essential as we derive with respect to x_tilde
     # and not x, so chaining rule implies we had the scaling
     # factor between x and x_tilde, which is 3.
@@ -36,6 +35,20 @@ def soft_periodicity(model, t):
 
 
 class Advection(pinns.DensityEstimator):
+    def autocasting(self):
+        if self.device == "cpu":
+            dtype = torch.bfloat16
+            if self.hp.model["name"] == "WIRES":
+                dtype = torch.bfloat32
+        else:
+            dtype = torch.float16
+            if self.hp.model["name"] == "WIRES":
+                dtype = torch.float32
+        self.use_amp = True
+        if self.hp.model["name"] == "WIRES":
+            self.use_amp = False
+        self.dtype = dtype
+
     def pde(self, z, z_hat, weight):
         x = pinns.gen_uniform(
             self.hp.losses["pde"]["bs"], self.device, dtype=self.dtype

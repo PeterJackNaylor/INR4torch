@@ -1,9 +1,9 @@
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 
 import pyqg
 
+from utils import CheckOrCreate
 
 def slice_satelite_like(
     cube,
@@ -61,14 +61,9 @@ def slice_satelite_like(
 def plot_q(m, sim, qmax=40, time=0, plot=True, interval=0.1, L=np.pi):
     time_f = round(time, 1)
     time_int = int(round(time_f / interval, 0))
-    try:
-        os.mkdir("pyqg_out/plots")
-    except:
-        pass
-    try:
-        os.mkdir("pyqg_out/plots/psi_simulation")
-    except:
-        pass
+    CheckOrCreate("pyqg_out/plots")
+    CheckOrCreate("pyqg_out/plots/simulation")
+    
     sim[:, :, time_int] = m.q[0]
     if plot:
         fig, ax = plt.subplots()
@@ -95,14 +90,9 @@ def laplacian(p):
 def plot_psi(m, sim, psimax=1, time=0, plot=True, interval=0.1, L=np.pi):
     time_f = round(time, 1)
     time_int = int(round(time_f / interval, 0))
-    try:
-        os.mkdir("pyqg_out/plots")
-    except:
-        pass
-    try:
-        os.mkdir("pyqg_out/plots/simulation")
-    except:
-        pass
+    CheckOrCreate("pyqg_out/plots")
+    CheckOrCreate("pyqg_out/plots/psi_simulation")
+    CheckOrCreate("pyqg_out/plots/psi_simulation_laplacian")
 
     qi = m.q
     qih = m.fft(qi)
@@ -139,6 +129,7 @@ def plot_psi(m, sim, psimax=1, time=0, plot=True, interval=0.1, L=np.pi):
 
 
 def main():
+    CheckOrCreate("pyqg_out")
     tmax = 6  # 40
     interval = 0.1
     L = 2.0 * np.pi
@@ -199,7 +190,7 @@ def main():
         times.append(round(_, 1))
 
     xytz_pos = slice_satelite_like(
-        simulation,
+        psi_simulation,
         L,
         tmax,
         interval,
@@ -210,7 +201,7 @@ def main():
         shift=shift,
     )
     xytz_neg = slice_satelite_like(
-        simulation,
+        psi_simulation,
         L,
         tmax,
         interval,
@@ -222,6 +213,10 @@ def main():
     )
     xytz = np.concatenate([xytz_pos, xytz_neg], axis=0)
 
+    CheckOrCreate("pyqg_out/plots/slices")
+
+    vmin = np.round(psi_simulation.min(), 0)
+    vmax = np.round(psi_simulation.max(), 0)
     for t in list(np.unique(xytz[:, 2])):
 
         t = round(t, 1)
@@ -231,17 +226,17 @@ def main():
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
         ax1.imshow(
-            simulation[::-1, :, idx],
+            psi_simulation[::-1, :, idx],
             extent=[0, L, 0, L],
-            vmin=-40,
-            vmax=40,
+            vmin=vmin,
+            vmax=vmax,
             cmap="RdBu_r",
         )
         ax2.imshow(
-            simulation[::-1, :, idx],
+            psi_simulation[::-1, :, idx],
             extent=[0, L, 0, L],
-            vmin=-40,
-            vmax=40,
+            vmin=vmin,
+            vmax=vmax,
             cmap="RdBu_r",
         )
         ax2.scatter(
@@ -249,8 +244,8 @@ def main():
             xytz[time_slice, 1],
             c=xytz[time_slice, 3],
             s=2.4,
-            vmin=-40,
-            vmax=40,
+            vmin=vmin,
+            vmax=vmax,
             cmap="RdBu_r",
         )
         ax3.scatter(
@@ -258,8 +253,8 @@ def main():
             xytz[time_slice, 1],
             c=xytz[time_slice, 3],
             s=2.4,
-            vmin=-40,
-            vmax=40,
+            vmin=vmin,
+            vmax=vmax,
             cmap="RdBu_r",
         )
         ax3.set_xlim([0, L])

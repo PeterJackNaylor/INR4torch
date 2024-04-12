@@ -20,8 +20,10 @@ def return_dataset(hp, gpu=True):
 
 class XT(pinns.DataPlaceholder):
     def __init__(self, hp, nv_samples=None, nv_targets=None, test=True, gpu=True):
+        self.name = hp.model["name"]
         self.need_target = True
         self.input_size = 2
+        self.output_size = 1
         self.test = test
         self.bs = hp.losses["mse"]["bs"]
         normalise_targets = hp.normalise_targets
@@ -55,3 +57,23 @@ class XT(pinns.DataPlaceholder):
 
         self.setup_cuda(gpu)
         self.setup_batch_idx()
+
+    def setup_cuda(self, gpu):
+        if gpu:
+            dtype = torch.float16
+            if self.name == "WIRES":
+                dtype = torch.float32
+            device = "cuda"
+        else:
+            dtype = torch.bfloat16
+            if self.name == "WIRES":
+                dtype = torch.bfloat32
+            device = "cpu"
+        if self.name == "WIRES":
+            dtype = dtype = torch.float32
+
+        self.samples = self.samples.to(device, dtype=dtype)
+        if self.need_target:
+            self.targets = self.targets.to(device, dtype=dtype)
+        self.device = device
+        self.dtype = dtype

@@ -19,6 +19,7 @@ class DataPlaceholder(Dataset):
     ):
         self.need_target = need_target
         self.input_size = 3
+        self.output_size = 1
         self.bs = bs
 
         pc = np.load(path)

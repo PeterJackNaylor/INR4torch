@@ -32,7 +32,8 @@ NN, model_hp = pinns.train(model_hp, Advection, return_dataset, Model_cl, gpu=gp
 
 xx = NN.test_set.x
 tt = NN.test_set.t
-predictions = NN.test_loop()
+with torch.no_grad():
+    predictions = NN.test_loop()
 if gpu:
     predictions = predictions.cpu()
 predictions = predictions.reshape((xx.shape[0], tt.shape[0])).numpy()

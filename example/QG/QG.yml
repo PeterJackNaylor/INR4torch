@@ -1,5 +1,5 @@
 #training
-epochs: 200 #0 #00 #180 #00
+epochs: 20 #0 #00 #180 #00
 normalise_inputs: False
 normalise_targets: True
 test_epochs: 10 # 0 # 1000
@@ -28,20 +28,20 @@ losses:
     report: True
     bs: 8192 # 8192
     loss_balancing: True #wether to be included in loss balancing
-  # pde_advection:
-  #   report: True
-  #   log: True
-  #   lambda: 1.e-1
-  #   temporal_causality: True
-  #   bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
-  #   method: pde_advection
-  #   grad_method: FD #PINNS
-  #   eps_temporal_causality: 0.1
-  #   loss_balancing: True #wether to be included in loss balancing
-  #   penalty: L2
-  #   # if FD
-  #   step_time: 1000
-  #   step_xy: 10
+  pde_advection:
+    report: True
+    log: True
+    lambda: 1.e-1
+    temporal_causality: True
+    bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+    method: pde_advection
+    grad_method: FD #PINNS
+    eps_temporal_causality: 0.1
+    loss_balancing: True #wether to be included in loss balancing
+    penalty: L2
+    # if FD
+    step_time: 1000
+    step_xy: 10
 
 
 

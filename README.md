@@ -1,0 +1,1 @@
+Best score obtained on Advection with RFF(4 layers, 256 neurons): 3.8227 .10^-2
