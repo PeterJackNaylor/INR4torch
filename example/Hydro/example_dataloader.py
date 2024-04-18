@@ -164,7 +164,7 @@ def return_dataset(hp, gpu=True):
 
 class PESQ(pinns.DataPlaceholder):
     def __init__(self, hp, nv_samples=None, nv_targets=None, test=True, gpu=True):
-
+        self.name = hp.model["name"]
         self.hp = hp
         self.need_target = True
         self.output_size = 6
@@ -225,3 +225,23 @@ class PESQ(pinns.DataPlaceholder):
             return {"x": sample}
         target = self.targets[idx]
         return {"x": sample, "z": target}
+
+    def setup_cuda(self, gpu):
+        if gpu:
+            dtype = torch.float16
+            if self.name == "WIRES":
+                dtype = torch.float32
+            device = "cuda"
+        else:
+            dtype = torch.bfloat16
+            if self.name == "WIRES":
+                dtype = torch.bfloat32
+            device = "cpu"
+        if self.name == "WIRES":
+            dtype = dtype = torch.float32
+
+        self.samples = self.samples.to(device, dtype=dtype)
+        if self.need_target:
+            self.targets = self.targets.to(device, dtype=dtype)
+        self.device = device
+        self.dtype = dtype

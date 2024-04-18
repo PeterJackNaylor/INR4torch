@@ -1,17 +1,18 @@
 #training
-max_iters: 10000 #00 #180 #00
+max_iters: 5000 #00 #180 #00
 normalise_targets: True
 test_frequency: 1000 # 1000
 save_model: True
-hard_periodicity: True
+hard_periodicity: False
 c: 80
+ignore_nan: True
 
 #Models
 model:
-  name: MFN #or RFF/SIREN/WIRES/MFN
+  name: RFF #or RFF/SIREN/WIRES/MFN
   hidden_nlayers: 4
   hidden_width: 256
-  scale: 20 #for SIREN: 30
+  scale: 2 #for SIREN: 30
   skip: False
   ## RFF specific
   mapping_size: 256
@@ -34,6 +35,7 @@ losses:
     report: True
     bs: 64
     loss_balancing: True #wether to be included in loss balancing
+    ignore_nan: True
   pde:
     report: True
     log: True

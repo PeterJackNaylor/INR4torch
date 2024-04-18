@@ -66,10 +66,6 @@ class RMSELoss(nn.Module):
             else:
                 loss = self.wmse(zhat, z, weight)
 
-        # if torch.isnan(zhat).sum() >0:
-        #     import pdb; pdb.set_trace()
-        # if torch.isnan(z).sum() >0:
-        #     import pdb; pdb.set_trace()
         return torch.sqrt(loss + self.eps)
 
 
@@ -411,14 +407,13 @@ class DensityEstimator:
         batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
 
         predictions = []
-        # with torch.no_grad():
-            # with torch.autocast(
-            #     device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-            # ):
-        for i in self.range(0, self.n_test, bs, leave=False):
-            idx = batch_idx[i : (i + bs)]
-            pred = self.model(self.test_set.samples[idx])
-            predictions.append(pred)
+        with torch.autocast(
+            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+        ):
+            for i in self.range(0, self.n_test, bs, leave=False):
+                idx = batch_idx[i : (i + bs)]
+                pred = self.model(self.test_set.samples[idx])
+                predictions.append(pred)
         return torch.cat(predictions)
 
     def write(self, text):
@@ -431,10 +426,6 @@ class DensityEstimator:
         with torch.no_grad():
             predictions = self.test_loop()
             loss_fn = self.loss_fn[self.hp.validation_loss]
-            # with torch.autocast(
-            #     device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-            # ):
-            # with torch.no_grad():
             test_loss = loss_fn(
                 predictions, self.test_set.targets[: predictions.shape[0]]
             ).item()

@@ -56,6 +56,21 @@ class Hydro(pinns.DensityEstimator):
         self.trial = trial
         self.autocasting()
 
+    def autocasting(self):
+        if self.device == "cpu":
+            dtype = torch.bfloat16
+            if self.hp.model["name"] == "WIRES":
+                dtype = torch.bfloat32
+        else:
+            dtype = torch.float16
+            if self.hp.model["name"] == "WIRES":
+                dtype = torch.float32
+        self.use_amp = True
+        if self.hp.model["name"] == "WIRES":
+            self.use_amp = False
+        self.dtype = dtype
+
+
     def pde(self, z, z_hat, weight):
         # conservation law
         M = self.M if hasattr(self, "M") else None
