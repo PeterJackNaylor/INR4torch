@@ -140,8 +140,14 @@ class DensityEstimator:
                 lr=self.hp.lr,
                 eps=self.hp.eps,
             )
+        elif self.hp.optimizer == "LBFGS":
+            self.optimizer = torch.optim.LBFGS(
+                                self.model.parameters(), 
+                                lr=self.hp.lr, 
+                                tolerance_change=self.hp.eps
+                            )
         else:
-            print("")
+            raise NameError("Optimizser not implemented")
 
     def setup_scheduler(self):
         scheduler_status = True

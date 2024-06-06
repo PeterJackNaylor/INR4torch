@@ -106,39 +106,106 @@ class Hydro(pinns.DensityEstimator):
         grad = spatial_grad(self.model, x, t)
         return grad
 
-    # def predict_test(self):
-    #     predictions = self.test_loop()
-    #     loss_fn = self.loss_fn[self.hp.validation_loss]
-    #     test_set = self.test_set
-    #     with torch.autocast(
-    #         device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-    #     ):
-    #         # test_set.column_index[test_set.E_pos] = random.choice(test_set.hp.var_pos["E"])
-    #         # test_set.column_index[test_set.DS_pos] = random.choice(test_set.hp.var_pos["DS"])
-    #         test_loss = loss_fn(
-    #             predictions, test_set.targets[: predictions.shape[0], test_set.column_index]
-    #         ).item()
-    #     if self.hp.verbose:
-    #         self.write(f"[{self.it}/{self.hp.max_iters}] Test Error: {test_loss:>4f}")
-    #     return test_loss
 
-    # def test_loop(self):
-    #     column_index = self.data.column_index
-    #     E_pos = self.data.E_pos
-    #     DS_pos = self.data.DS_pos
-    #     bs = self.largest_bs()
-    #     batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
-        
-    #     predictions = []
-    #     with torch.autocast(
-    #         device_type=self.device, dtype=self.dtype, enabled=self.use_amp
-    #     ):
-    #         with torch.no_grad():
-    #             for i in self.range(0, self.n_test, bs, leave=False):
-    #                 column_index[E_pos] = random.choice(self.hp.var_pos["E"])
-    #                 column_index[DS_pos] = random.choice(self.hp.var_pos["DS"])
-    #                 samples = self.test_set.samples[:, column_index]
-    #                 idx = batch_idx[i : (i + bs)]
-    #                 pred = self.model(samples[idx])
-    #                 predictions.append(pred)
-    #     return torch.cat(predictions)
+def conservation_residue_forecastcombi(model, t, nv_samples):
+    torch.set_grad_enabled(True)
+    t.requires_grad_(True)
+    u = model(t)
+    PEDSQ = u[1]
+    P = PEDSQ[:, 0]
+    E = PEDSQ[:, 1]
+    delta_s = PEDSQ[:, 2]
+    ddeltaS_dt = (1 / nv_samples[0][1]) * pinns.gradient(delta_s, t)[:, 0] / 30.4
+
+    Q = PEDSQ[:, 3]
+    residue = ddeltaS_dt - P + E + Q
+
+    return residue 
+
+def conditional_conservation_residue_forecastcombi(model, t, x, nv_samples):
+    torch.set_grad_enabled(True)
+    t.requires_grad_(True)
+    u = model(t, x)
+    PEDSQ = u[1]
+    P = PEDSQ[:, 0]
+    E = PEDSQ[:, 1]
+    delta_s = PEDSQ[:, 2]
+    ddeltaS_dt = (1 / nv_samples[0][1]) * pinns.gradient(delta_s, t)[:, 0] / 30.4
+
+    Q = PEDSQ[:, 3]
+    residue = ddeltaS_dt - P + E + Q
+
+    return residue 
+class HydroForecastCombi(Hydro):
+    def compute_loss(self, zhat, **args_dic):
+        for key in self.hp.losses.keys():
+            if key != "pde":
+                self.loss_values[key].append(self.loss_fn[key](zhat[0], **args_dic))
+            else:
+                self.loss_values[key].append(self.loss_fn[key](zhat[1], **args_dic))
+
+    def pde(self, z, z_hat, weight):
+        # conservation law
+        M = self.M if hasattr(self, "M") else None
+        temporal_scheme = self.hp.losses["pde"]["temporal_causality"]
+
+        t = pinns.gen_uniform(
+            self.hp.losses["pde"]["bs"],
+            self.device,
+            start=-1,
+            end=1,
+            temporal_scheme=temporal_scheme,
+            M=M,
+            dtype=self.dtype,
+        )
+        residue = conservation_residue_forecastcombi(self.model, t, self.hp.nv_samples)
+        return residue
+    def test_loop(self):
+        bs = self.largest_bs()
+        batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
+
+        predictions = []
+        with torch.autocast(
+            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+        ):
+            for i in self.range(0, self.n_test, bs, leave=False):
+                idx = batch_idx[i : (i + bs)]
+                pred = self.model(self.test_set.samples[idx])[0]
+                predictions.append(pred)
+        return torch.cat(predictions)
+    
+
+    def test_loop_real(self):
+        bs = self.largest_bs()
+        batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
+
+        predictions = []
+        with torch.autocast(
+            device_type=self.device, dtype=self.dtype, enabled=self.use_amp
+        ):
+            for i in self.range(0, self.n_test, bs, leave=False):
+                idx = batch_idx[i : (i + bs)]
+                pred = self.model(self.test_set.samples[idx])[1]
+                predictions.append(pred)
+        return torch.cat(predictions)
+    
+class CombiHydroForecastCombi(HydroForecastCombi):
+    def pde(self, z, z_hat, weight):
+        # conservation law
+        M = self.M if hasattr(self, "M") else None
+        temporal_scheme = self.hp.losses["pde"]["temporal_causality"]
+
+        t = pinns.gen_uniform(
+            self.hp.losses["pde"]["bs"],
+            self.device,
+            start=-1,
+            end=1,
+            temporal_scheme=temporal_scheme,
+            M=M,
+            dtype=self.dtype,
+        )
+        x = torch.randint(0, 6, (self.hp.losses["pde"]["bs"], 1), device=self.device, dtype=self.dtype)
+        residue = conditional_conservation_residue_forecastcombi(self.model, t, x, self.hp.nv_samples)
+        return residue
+
+# class LSTMCombiHydroForecastCombi(CombiHydroForecastCombi):

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .model_utils import linear_fn, RFFLayer, SkipLayer, MFN, ModifiedMLP
+from .model_utils import linear_fn, RFFLayer, SkipLayer, MFN, ModifiedMLP, KAN
 
 class INR(nn.Module):
     def __init__(
@@ -16,7 +16,6 @@ class INR(nn.Module):
         self.output_size = output_size
         self.hp = hp
         self.setup()
-
         self.gen_architecture()
 
     def setup(self):
@@ -27,8 +26,20 @@ class INR(nn.Module):
                 self.act = nn.ReLU
         else:
             self.act = None
-
+    def gen_kan(self):
+        width_std = self.hp.model["hidden_width"]
+        layer_width = [self.input_size] + [
+            width_std for i in range(self.hp.model["hidden_nlayers"])
+        ] + [self.output_size]
+        # self.mlp = KAN(layer_width, grid=5, k=3, grid_eps=1.0, noise_scale_base=0.25)
+        self.mlp = KAN(layer_width)
     def gen_architecture(self):
+        if self.name == "KAN":
+            self.gen_kan()
+        else:
+            self.gen_mlp_network()
+
+    def gen_mlp_network(self):
         linear_layer_fn = linear_fn(self.hp.model["linear"], self.hp, self.act)
         layers = []
         width_std = self.hp.model["hidden_width"]

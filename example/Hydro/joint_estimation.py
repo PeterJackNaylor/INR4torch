@@ -59,7 +59,7 @@ for i in range(NN.n_outputs):
                     alpha=0.2,
                     lw=1))
     ax.legend()
-    plt.savefig(f"estimation/{inverse_dic[i]}.png")
+    plt.savefig(f"joint_estimation/{inverse_dic[i]}.png")
     plt.close()
 
 residues = conservation_residue(NN.model, NN.test_set.samples.to(torch.float32), model_hp.nv_samples, model_hp.nv_targets, model_hp.var_pos)

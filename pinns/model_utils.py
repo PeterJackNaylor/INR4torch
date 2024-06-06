@@ -5,7 +5,7 @@ from numpy import sqrt
 import torch.jit as jit
 import torch._dynamo
 from typing import Optional
-
+from .kan_utils import KAN
 
 class Linear(nn.Module):
     def __init__(self, size_in, size_out, is_last=False, act=nn.Tanh):
@@ -257,3 +257,66 @@ def linear_fn(text, hp, act):
             return partial(LinearLayerRWF, mean=hp.model["mean"], std=hp.model["std"], act=act)
     elif hp.model["name"] == "MFN":
         return partial(MFN_Layer, in_f0=hp.input_size, act=act)
+    
+
+# class Kan(KAN):
+#     def forward(self, *args):
+#         '''
+#         KAN forward
+        
+#         Args:
+#         -----
+#             x : 2D torch.float
+#                 inputs, shape (batch, input dimension)
+            
+#         Returns:
+#         --------
+#             y : 2D torch.float
+#                 outputs, shape (batch, output dimension)
+            
+#         Example
+#         -------
+#         >>> model = KAN(width=[2,5,3], grid=5, k=3)
+#         >>> x = torch.normal(0,1,size=(100,2))
+#         >>> model(x).shape
+#         torch.Size([100, 3])
+#         '''
+#         x = torch.cat(args, axis=1)
+
+#         self.acts = []  # shape ([batch, n0], [batch, n1], ..., [batch, n_L])
+#         self.spline_preacts = []
+#         self.spline_postsplines = []
+#         self.spline_postacts = []
+#         self.acts_scale = []
+#         self.acts_scale_std = []
+#         # self.neurons_scale = []
+
+#         self.acts.append(x)  # acts shape: (batch, width[l])
+
+#         for l in range(self.depth):
+
+#             x_numerical, preacts, postacts_numerical, postspline = self.act_fun[l](x)
+
+#             if self.symbolic_enabled == True:
+#                 x_symbolic, postacts_symbolic = self.symbolic_fun[l](x)
+#             else:
+#                 x_symbolic = 0.
+#                 postacts_symbolic = 0.
+
+#             x = x_numerical + x_symbolic
+#             postacts = postacts_numerical + postacts_symbolic
+
+#             # self.neurons_scale.append(torch.mean(torch.abs(x), dim=0))
+#             grid_reshape = self.act_fun[l].grid.reshape(self.width[l + 1], self.width[l], -1)
+#             input_range = grid_reshape[:, :, -1] - grid_reshape[:, :, 0] + 1e-4
+#             output_range = torch.mean(torch.abs(postacts), dim=0)
+#             self.acts_scale.append(output_range / input_range)
+#             self.acts_scale_std.append(torch.std(postacts, dim=0))
+#             self.spline_preacts.append(preacts.detach())
+#             self.spline_postacts.append(postacts.detach())
+#             self.spline_postsplines.append(postspline.detach())
+
+#             x = x + self.biases[l].weight
+#             self.acts.append(x)
+
+#         return x
