@@ -332,8 +332,6 @@ class DensityEstimator:
         ):
             self.trial.report(self.test_scores[-1], it)
             if self.trial.should_prune():
-                if "B" in self.hp.keys():
-                    self.hp.B = np.array(self.hp.B.cpu())
                 self.hp.best_score = self.best_test_score
                 np.savez(
                     self.hp.npz_name,
