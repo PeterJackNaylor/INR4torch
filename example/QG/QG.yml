@@ -1,0 +1,93 @@
+#training
+epochs: 20 #0 #00 #180 #00
+normalise_inputs: False
+normalise_targets: True
+test_epochs: 10 # 0 # 1000
+save_model: True
+
+#Models
+model:
+  name: RFF #or RFF/SIREN/WIRES
+  hidden_nlayers: 5
+  hidden_width: 256
+  scale: 1
+  skip: False
+  ## RFF specific
+  mapping_size: 512
+  activation: tanh
+  modified_mlp: True #True # if you have a seperate encoder for the spatial and temporal inputs.
+  linear: HE # RWF # HE # Glorot # RWF RWF does not work with SIREN
+  # RWF Specific
+  mean: 1
+  std: 0.1
+
+# Lambda values in the loss
+validation_loss: mse
+losses:
+  mse:
+    report: True
+    bs: 8192 # 8192
+    loss_balancing: True #wether to be included in loss balancing
+  pde_advection:
+    report: True
+    log: True
+    lambda: 1.e-1
+    temporal_causality: True
+    bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+    method: pde_advection
+    grad_method: FD #PINNS
+    eps_temporal_causality: 0.1
+    loss_balancing: True #wether to be included in loss balancing
+    penalty: L2
+    # if FD
+    step_time: 1000
+    step_xy: 10
+
+
+
+
+# learning schemes
+temporal_causality:
+  M: 16 # powers of 2 only
+  eps: 8.e-3
+  step: 1 #update
+
+
+# Loss balancing
+relobralo:
+  status: False
+  T: 1.
+  alpha: 0.999
+  rho: 0.5
+  step: 100
+
+self_adapting_loss_balancing:
+  status: True
+  alpha: 0.9
+  epoch: 1 #1000 #update
+
+
+early_stopping:
+  status: False
+  ignore_first: 5
+  patience: 20
+  value: 0.0001
+
+# optimizers
+lr: 1.e-3
+eps: 1.e-8 #adam precision
+clip_gradients: True
+
+learning_rate_decay:
+  status: True
+  epoch: 10
+  gamma: 0.8 # 0.9
+
+cosine_anealing:
+  status: False
+  min_eta: 0
+  epoch: 100
+
+optuna:
+  patience: 10000
+  trials: 100

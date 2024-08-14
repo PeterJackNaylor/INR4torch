@@ -1,3 +1,4 @@
+import sys
 import torch
 import numpy as np
 import matplotlib.pylab as plt
@@ -11,7 +12,11 @@ from example_pde_model import Advection
 from example_model import return_model_advection as model
 
 torch.set_float32_matmul_precision("high")
-model_hp = pinns.read_yaml("../default-parameters.yml")
+if sys.argv[1] == "default":
+    param_file = "../../default-parameters.yml"
+elif sys.argv[1] == "kan":
+    param_file = "../../default-kan.yml"
+model_hp = pinns.read_yaml(param_file)
 c = model_hp.c
 real_u, real_t, real_x = get_dataset(c=c, n_t=200, n_x=128)
 gpu = torch.cuda.is_available()
@@ -32,12 +37,22 @@ NN, model_hp = pinns.train(model_hp, Advection, return_dataset, Model_cl, gpu=gp
 
 xx = NN.test_set.x
 tt = NN.test_set.t
-predictions = NN.test_loop()
+with torch.no_grad():
+    predictions = NN.test_loop()
 if gpu:
     predictions = predictions.cpu()
 predictions = predictions.reshape((xx.shape[0], tt.shape[0])).numpy()
-
 gt = real_u
+
+mse = np.linalg.norm(gt - predictions) ** 2 / predictions.shape[0] / NN.data.nv_targets[0][1]
+
+print("##########################")
+print("#       MSE ERROR :      #")
+print("#                        #")
+print(f"#        {mse:.6f}        #")
+print("#                        #")
+print("##########################")
+
 
 score = np.linalg.norm(gt - predictions) / np.linalg.norm(gt)
 
@@ -48,7 +63,6 @@ print("#                        #")
 print(f"#        {score:.6f}        #")
 print("#                        #")
 print("##########################")
-
 
 im = plt.imshow(
     predictions,

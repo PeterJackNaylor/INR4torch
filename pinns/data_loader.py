@@ -14,9 +14,12 @@ class DataPlaceholder(Dataset):
         gpu=False,
         need_target=True,
         bs=1,
+        temporal_causality=False,
+        M=32,
     ):
         self.need_target = need_target
         self.input_size = 3
+        self.output_size = 1
         self.bs = bs
 
         pc = np.load(path)
@@ -33,22 +36,32 @@ class DataPlaceholder(Dataset):
 
         if self.need_target:
             self.targets = torch.from_numpy(targets)
-        if gpu:
-            self.send_cuda()
-            self.device = "cuda"
-        else:
-            self.device = "cpu"
+
+        self.setup_cuda(gpu)
         self.setup_batch_idx()
+        if temporal_causality:
+            self.temporal_causality = temporal_causality
+            self.M = M
+            self.setup_temporal_causality()
 
     def setup_data(self, pc):
         samples = pc[:, 0].astype(np.float32)
         targets = pc[:, 1].astype(np.float32)
         return samples, targets
 
-    def send_cuda(self):
-        self.samples = self.samples.to("cuda")
+    def setup_cuda(self, gpu):
+        if gpu:
+            dtype = torch.float16
+            device = "cuda"
+        else:
+            dtype = torch.bfloat16
+            device = "cpu"
+
+        self.samples = self.samples.to(device, dtype=dtype)
         if self.need_target:
-            self.targets = self.targets.to("cuda")
+            self.targets = self.targets.to(device, dtype=dtype)
+        self.device = device
+        self.dtype = dtype
 
     def normalize(self, vector, nv, include_last=True):
         c = vector.shape[1]
@@ -74,9 +87,11 @@ class DataPlaceholder(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
         if not self.need_target:
-            return sample
+            # return sample
+            return {"x": sample}
         target = self.targets[idx]
-        return sample, target
+        return {"x": sample, "z": target}
+        # return sample, target
 
     def __next__(self):
         if self.last_idx + self.bs <= self.__len__():
@@ -102,51 +117,11 @@ class DataPlaceholder(Dataset):
         else:
             self.batch_idx = torch.arange(0, self.__len__(), device=self.device)
 
+    def setup_temporal_causality(self):
+        time = self.samples[:, -1]
+        start, end = time.min(), time.max()
+        step = (end - start) / self.M
+        self.q_time = torch.round(time / step) * step
 
-# def return_dataset_prediction(
-#     path,
-#     nv_samples=None,
-# ):
-#     xytz = XYTZ(
-#         path,
-#         pred_type="grid_predictions",
-#         nv_samples=nv_samples,
-#     )
-#     return xytz
-
-
-# def return_dataset(path, normalise_targets=True, leave_out=None, gpu=False):
-#     nv_targets = None
-#     xytz_train = XYTZ(
-#         path,
-#         train_fold=True,
-#         train_fraction=0.8,
-#         seed=42,
-#         nv_samples=None,
-#         normalise_targets=normalise_targets,
-#         leave_out=leave_out,
-#         gpu=gpu,
-#     )
-#     nv_samples = xytz_train.nv_samples
-#     nv_targets = xytz_train.nv_targets
-#     xytz_test = XYTZ(
-#         path,
-#         train_fold=False,
-#         train_fraction=0.8,
-#         seed=42,
-#         nv_samples=nv_samples,
-#         nv_targets=nv_targets,
-#         leave_out=leave_out,
-#         gpu=gpu,
-#     )
-
-#     return xytz_train, xytz_test, nv_samples, nv_targets
-
-
-# def main():
-#     path = "./data/test_data.npy"
-#     # ds, ds_test, nv, nv_y = return_dataset(path, gpu=False)
-
-
-# if __name__ == "__main__":
-#     main()
+        # import pdb; pdb.set_trace()
+        # temporal_values = torch.arange(start, end + step, step=step)

@@ -3,6 +3,13 @@ import torch
 import torch.nn as nn
 from torch import cos, sin
 
+@torch.jit.script
+def hard_period(x, t, p_t):
+    w_t = 2 * torch.pi / p_t
+    w_x = 1 * torch.pi
+    return torch.column_stack(
+        [cos(w_t * t), sin(w_t * t), cos(w_x * x), sin(w_x * x)]
+        )
 
 class PeriodicityLayer(nn.Module):
     def __init__(self):
@@ -13,11 +20,7 @@ class PeriodicityLayer(nn.Module):
     def forward(self, x_t):
         x = x_t[:, 0]
         t = x_t[:, 1]
-        w_t = 2 * torch.pi / self.p_t
-        w_x = 1 * torch.pi
-        return torch.column_stack(
-            [cos(w_t * t), sin(w_t * t), cos(w_x * x), sin(w_x * x)]
-        )
+        return hard_period(x, t, self.p_t)
 
 
 class INR_hard_periodicity(INR):
@@ -33,33 +36,15 @@ class INR_hard_periodicity(INR):
         self.input_size = input_size
         self.output_size = output_size
         self.hp = hp
-
         self.setup()
 
         self.gen_architecture()
         self.hard_period = PeriodicityLayer()
 
-        if hp.normalise_targets:
-            self.final_act = torch.tanh
-        else:
-            self.final_act = nn.Identity()
-
     def forward(self, *args):
         xin = torch.cat(args, axis=1)
         xin = self.hard_period(xin)
-        xin = self.first(xin)
-        if self.hp.model["skip"]:
-            for i, layer in enumerate(self.mlp.model):
-                if layer.is_first:
-                    x = layer(xin)
-                elif layer.is_last:
-                    out = layer(x)
-                else:
-                    x = layer(x) + x if i % 2 == 1 else layer(x)
-        else:
-            out = self.mlp(xin)
-        # out = torch.squeeze(out)
-        return self.final_act(out)
+        return self.mlp(xin)
 
 
 def return_model_advection(hard_periodicity):
