@@ -10,6 +10,14 @@ def check_model_hp(hp):
         hp.clip_gradients = True
     if "cosine_anealing" not in hp:
         hp.cosine_anealing = {"status": False, "min_eta": 0, "step": 500}
+    if "relobralo" not in hp:
+        hp.relobralo = {
+            "status": False,
+            "T": 1.0,
+            "alpha": 0.999,
+            "rho": 0.5,
+            "step": 100,
+        }
     return hp
 
 def check_data_loader_hp(hp):
