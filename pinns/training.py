@@ -1,8 +1,39 @@
 import numpy as np
 import torch
 
-# from .models import gen_b
+def check_model_hp(hp):
+    if "linear" not in hp.model:
+        hp.model["linear"] = "HE"
+    if "eps" not in hp:
+        hp.eps = 1.e-8
+    if "clip_gradients" not in hp:
+        hp.clip_gradients = True
+    if "cosine_anealing" not in hp:
+        hp.cosine_anealing = {"status": False, "min_eta": 0, "step": 500}
+    return hp
 
+def check_data_loader_hp(hp):
+    if "model" in hp:
+        if "name" not in hp.model:
+            hp.model["name"] = "default"
+    else:
+        hp.model = {"name": "default"}
+    if "hard_periodicity" not in hp:
+        hp.hard_periodicity = False
+    return hp
+
+def check_estimator_hp(hp):
+    if "verbose" not in hp:
+        hp.verbose = True
+    if "optuna" not in hp:
+        hp.optuna = {"patience": 10000, "trials": 1}
+    if "save_model" not in hp:
+        hp.save_model = False
+    # if "npz_name" not in hp:
+    #     hp.npz_name = "default.npz"
+    # if "pth_name" not in hp:
+    #     hp.pth_name = "default.pth"
+    return hp   
 
 def train(
     hp,
@@ -13,6 +44,10 @@ def train(
     trial=None,
     gpu=False,
 ):
+    hp = check_data_loader_hp(hp)
+    hp = check_model_hp(hp)
+    hp = check_estimator_hp(hp)
+
     train, test = dataset_fn(hp, gpu=gpu)
 
     hp.input_size = train.input_size

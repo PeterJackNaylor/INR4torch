@@ -40,6 +40,7 @@ class INR(nn.Module):
             self.gen_mlp_network()
 
     def gen_mlp_network(self):
+        print(self.hp.model)
         linear_layer_fn = linear_fn(self.hp.model["linear"], self.hp, self.act)
         layers = []
         width_std = self.hp.model["hidden_width"]

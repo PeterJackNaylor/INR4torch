@@ -556,4 +556,5 @@ class DensityEstimator:
             if break_loop:
                 break
         self.convert_last_loss_value()
-        self.load_best_model()
+        if self.hp.save_model:
+            self.load_best_model()

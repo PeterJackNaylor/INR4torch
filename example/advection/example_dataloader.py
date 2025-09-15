@@ -1,9 +1,10 @@
 import numpy as np
 import torch
 import pinns
-
+from pinns.training import check_data_loader_hp
 
 def return_dataset(hp, gpu=True):
+    hp = check_data_loader_hp(hp)
     data_train = XT(hp, nv_samples=None, nv_targets=None, test=False, gpu=gpu)
     data_test = XT(
         hp,
