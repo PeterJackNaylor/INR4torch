@@ -515,7 +515,7 @@ class DensityEstimator:
                 self.loss_fn[self.hp.validation_loss] = WL1Loss()
 
     def fit(self):
-        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        scaler = torch.amp.GradScaler(self.device, enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
         self.setup_losses()
