@@ -224,3 +224,4 @@ example/QG/pyqg_out/
 example/advection/plots_nice_training/
 example/Hydro/estimation/
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,visualstudiocode
+.DS_Store
