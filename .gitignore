@@ -225,3 +225,5 @@ example/advection/plots_nice_training/
 example/Hydro/estimation/
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,visualstudiocode
 .DS_Store
+INR4torch_review.md
+INR4torch_review_round2.md

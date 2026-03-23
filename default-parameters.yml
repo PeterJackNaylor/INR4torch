@@ -17,7 +17,7 @@ model:
   ## RFF specific
   mapping_size: 256
   activation: tanh
-  modified_mlp: False #True # if you have a seperate encoder for the spatial and temporal inputs.
+  modified_mlp: False #True # if you have a separate encoder for the spatial and temporal inputs.
   linear: HE # RWF # HE # Glorot # RWF Glorot does not work with SIREN
   # RWF Specific
   mean: 1
@@ -34,7 +34,7 @@ losses:
   mse:
     report: True
     bs: 64
-    loss_balancing: True #wether to be included in loss balancing
+    loss_balancing: True #whether to be included in loss balancing
     ignore_nan: True
   pde:
     report: True
@@ -43,7 +43,7 @@ losses:
     temporal_causality: True
     bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
     method: pde
-    loss_balancing: True #wether to be included in loss balancing
+    loss_balancing: True #whether to be included in loss balancing
     penalty: L2
   # periodicity:
   #   report: False
@@ -58,7 +58,7 @@ losses:
   #   temporal_causality: True
   #   bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
   #   method: spatial_gradient
-  #   loss_balancing: False #wether to be included in loss balancing
+  #   loss_balancing: False #whether to be included in loss balancing
 
 
 
@@ -101,7 +101,7 @@ learning_rate_decay:
   step: 2000
   gamma: 0.98 # 0.9
 
-cosine_anealing:
+cosine_annealing:
   status: False
   min_eta: 0
   step: 500

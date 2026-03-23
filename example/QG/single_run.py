@@ -36,7 +36,7 @@ model_hp.test_frequency = ceil(n // bs) * model_hp.test_epochs
 model_hp.learning_rate_decay["step"] = (
     ceil(n // bs) * model_hp.learning_rate_decay["epoch"]
 )
-model_hp.cosine_anealing["step"] = ceil(n // bs) * model_hp.cosine_anealing["epoch"]
+model_hp.cosine_annealing["step"] = ceil(n // bs) * model_hp.cosine_annealing["epoch"]
 model_hp.self_adapting_loss_balancing["step"] = (
     ceil(n // bs) * model_hp.self_adapting_loss_balancing["epoch"]
 )
@@ -98,7 +98,7 @@ for i in range(3):
         samples[:, i] * NN.test_set.nv_samples[i][1] + NN.test_set.nv_samples[i][0]
     )
 ts = np.unique(xytz[:, 2])
-interval = 0.1 
+interval = 0.1
 
 train_predictions = (
     predict(NN.data.samples[:, :3], NN).cpu().numpy() * NN.test_set.nv_targets[0][1]
@@ -215,4 +215,4 @@ for i, t in enumerate(NN.test_set.time_idx):
 # plt.plot(gt[:, 0])
 # plt.savefig("plots/ground_truth_time_0.png")
 # plt.close()
-model_plot(NN, samples, targets, model_hp, ts, x , y, z, L, interval)
+model_plot(NN, samples, targets, model_hp, ts, x, y, z, L, interval)

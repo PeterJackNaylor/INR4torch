@@ -1,12 +1,27 @@
-from typing import List, Union, Optional
+from __future__ import annotations
+
+from typing import List, Union, Optional, Tuple
 import torch
 from torch.autograd import grad
 import torch._dynamo
 
-def hessian(y, x):
-    """hessian of y wrt x
-    y: shape (meta_batch_size, num_observations, channels)
-    x: shape (meta_batch_size, num_observations, 2)
+
+def hessian(y: torch.Tensor, x: torch.Tensor) -> Tuple[torch.Tensor, int]:
+    """Compute the Hessian matrix of y with respect to x.
+
+    Parameters
+    ----------
+    y : torch.Tensor
+        Output tensor of shape (meta_batch_size, num_observations, channels).
+    x : torch.Tensor
+        Input tensor of shape (meta_batch_size, num_observations, dims).
+
+    Returns
+    -------
+    h : torch.Tensor
+        Hessian tensor of shape (meta_batch_size, num_observations, channels, dims, dims).
+    status : int
+        0 if OK, -1 if NaN values detected.
     """
     meta_batch_size, num_observations = y.shape[:2]
     grad_y = torch.ones_like(y[..., 0]).to(y.device)
@@ -29,12 +44,43 @@ def hessian(y, x):
     return h, status
 
 
-def laplace(y, x):
+def laplace(y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Compute the Laplacian of y with respect to x.
+
+    Equivalent to the trace of the Hessian, computed as
+    divergence(gradient(y, x), x).
+
+    Parameters
+    ----------
+    y : torch.Tensor
+        Output tensor.
+    x : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        Laplacian tensor.
+    """
     grad = gradient(y, x)
     return divergence(grad, x)
 
 
-def divergence(y, x):
+def divergence(y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Compute the divergence of a vector field y with respect to x.
+
+    Parameters
+    ----------
+    y : torch.Tensor
+        Vector field tensor with last dimension being the vector components.
+    x : torch.Tensor
+        Input coordinates.
+
+    Returns
+    -------
+    torch.Tensor
+        Divergence scalar field.
+    """
     div = 0.0
     for i in range(y.shape[-1]):
         div += grad(y[..., i], x, torch.ones_like(y[..., i]), create_graph=True)[0][
@@ -44,17 +90,29 @@ def divergence(y, x):
 
 
 @torch.jit.script
-def gradient(dy: torch.Tensor,
-             dx: Union[List[torch.Tensor], torch.Tensor],
-             ones_like_tensor: Optional[List[Optional[torch.Tensor]]] = None,
-             create_graph: bool = True) -> Optional[torch.Tensor]:
-    """Compute the gradient of a tensor `dy` with respect to another tensor `dx`.
+def gradient(
+    dy: torch.Tensor,
+    dx: Union[List[torch.Tensor], torch.Tensor],
+    ones_like_tensor: Optional[List[Optional[torch.Tensor]]] = None,
+    create_graph: bool = True,
+) -> Optional[torch.Tensor]:
+    """Compute the gradient of dy with respect to dx using autograd.
 
-    :param dy: The tensor to compute the gradient for.
-    :param dx: The tensor with respect to which the gradient is computed.
-    :param ones_like_tensor: A tensor with the same shape as `dy`, used for creating the gradient (default is None).
-    :param create_graph: Whether to create a computational graph for higher-order gradients (default is True).
-    :return: The gradient of `dy` with respect to `dx`.
+    Parameters
+    ----------
+    dy : torch.Tensor
+        The output tensor to differentiate.
+    dx : torch.Tensor or list of torch.Tensor
+        The input tensor(s) with respect to which the gradient is computed.
+    ones_like_tensor : list of torch.Tensor, optional
+        Pre-allocated grad_outputs tensor. If None, uses torch.ones_like(dy).
+    create_graph : bool, optional
+        Whether to create computation graph for higher-order gradients. Default: True.
+
+    Returns
+    -------
+    torch.Tensor
+        Gradient tensor with the same shape as dx.
     """
     if ones_like_tensor is None:
         grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(dy)]
@@ -72,14 +130,27 @@ def gradient(dy: torch.Tensor,
         retain_graph=True,
         allow_unused=False,
     )[0]
-    
 
     return dy_dx
 
 
+def jacobian(y: torch.Tensor, x: torch.Tensor) -> Tuple[torch.Tensor, int]:
+    """Compute the Jacobian matrix of y with respect to x.
 
-def jacobian(y, x):
-    """jacobian of y wrt x"""
+    Parameters
+    ----------
+    y : torch.Tensor
+        Output tensor of shape (meta_batch_size, num_observations, out_dims).
+    x : torch.Tensor
+        Input tensor of shape (meta_batch_size, num_observations, in_dims).
+
+    Returns
+    -------
+    jac : torch.Tensor
+        Jacobian of shape (meta_batch_size, num_observations, out_dims, in_dims).
+    status : int
+        0 if OK, -1 if NaN values detected.
+    """
     meta_batch_size, num_observations = y.shape[:2]
     jac = torch.zeros(meta_batch_size, num_observations, y.shape[-1], x.shape[-1]).to(
         y.device

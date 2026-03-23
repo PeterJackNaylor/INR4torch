@@ -4,6 +4,42 @@ import math
 
 
 class KANLinear(torch.nn.Module):
+    """Single KAN layer using B-spline basis functions.
+
+    Combines a base linear transformation (with SiLU activation)
+    and a learnable spline transformation. The output is the sum
+    of both branches.
+
+    Parameters
+    ----------
+    in_features : int
+        Number of input features.
+    out_features : int
+        Number of output features.
+    grid_size : int, optional
+        Number of grid intervals for B-splines. Default: 5.
+    spline_order : int, optional
+        Order of the B-spline (degree = order). Default: 3.
+    scale_noise : float, optional
+        Scale of noise for spline weight initialisation. Default: 0.1.
+    scale_base : float, optional
+        Scale factor for base weight initialisation. Default: 1.0.
+    scale_spline : float, optional
+        Scale factor for spline weight initialisation. Default: 1.0.
+    enable_standalone_scale_spline : bool, optional
+        If True, uses a separate learnable scaler for spline weights. Default: True.
+    base_activation : nn.Module class, optional
+        Activation for the base branch. Default: nn.SiLU.
+    grid_eps : float, optional
+        Interpolation factor between uniform and adaptive grids. Default: 0.02.
+    grid_range : list of float, optional
+        Initial grid range [min, max]. Default: [-1, 1].
+
+    References
+    ----------
+    Liu, Z. et al. "KAN: Kolmogorov-Arnold Networks." arXiv:2404.19756, 2024.
+    """
+
     def __init__(
         self,
         in_features,
@@ -35,13 +71,13 @@ class KANLinear(torch.nn.Module):
         )
         self.register_buffer("grid", grid)
 
-        self.base_weight = torch.nn.Parameter(torch.Tensor(out_features, in_features))
+        self.base_weight = torch.nn.Parameter(torch.empty(out_features, in_features))
         self.spline_weight = torch.nn.Parameter(
-            torch.Tensor(out_features, in_features, grid_size + spline_order)
+            torch.empty(out_features, in_features, grid_size + spline_order)
         )
         if enable_standalone_scale_spline:
             self.spline_scaler = torch.nn.Parameter(
-                torch.Tensor(out_features, in_features)
+                torch.empty(out_features, in_features)
             )
 
         self.scale_noise = scale_noise
@@ -54,7 +90,9 @@ class KANLinear(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.kaiming_uniform_(self.base_weight, a=math.sqrt(5) * self.scale_base)
+        torch.nn.init.kaiming_uniform_(
+            self.base_weight, a=math.sqrt(5) * self.scale_base
+        )
         with torch.no_grad():
             noise = (
                 (
@@ -73,7 +111,9 @@ class KANLinear(torch.nn.Module):
             )
             if self.enable_standalone_scale_spline:
                 # torch.nn.init.constant_(self.spline_scaler, self.scale_spline)
-                torch.nn.init.kaiming_uniform_(self.spline_scaler, a=math.sqrt(5) * self.scale_spline)
+                torch.nn.init.kaiming_uniform_(
+                    self.spline_scaler, a=math.sqrt(5) * self.scale_spline
+                )
 
     def b_splines(self, x: torch.Tensor):
         """
@@ -161,7 +201,7 @@ class KANLinear(torch.nn.Module):
             self.scaled_spline_weight.view(self.out_features, -1),
         )
         output = base_output + spline_output
-        
+
         output = output.view(*original_shape[:-1], self.out_features)
         return output
 
@@ -238,6 +278,23 @@ class KANLinear(torch.nn.Module):
 
 
 class KAN(torch.nn.Module):
+    """Kolmogorov-Arnold Network — a stack of KANLinear layers.
+
+    Parameters
+    ----------
+    layers_hidden : list of int
+        Layer widths including input and output dimensions.
+        e.g., [2, 16, 1] creates a 2-layer KAN with hidden dim 16.
+    grid_size : int, optional
+        Number of grid intervals. Default: 5.
+    spline_order : int, optional
+        B-spline order. Default: 3.
+
+    References
+    ----------
+    Liu, Z. et al. "KAN: Kolmogorov-Arnold Networks." arXiv:2404.19756, 2024.
+    """
+
     def __init__(
         self,
         layers_hidden,

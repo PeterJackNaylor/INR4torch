@@ -7,14 +7,48 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 
 
 def Norm1(vector, dim=None):
-    return torch.norm(vector, p=1, dim=dim)
+    """Compute the L1 norm of a vector.
+
+    Parameters
+    ----------
+    vector : torch.Tensor
+        Input tensor.
+    dim : int, optional
+        Dimension along which to compute.
+
+    Returns
+    -------
+    torch.Tensor
+    """
+    return torch.linalg.vector_norm(vector, ord=1, dim=dim)
 
 
 def Norm2(vector, dim=None):
-    return torch.norm(vector, p=2, dim=dim)
+    """Compute the L2 norm of a vector.
+
+    Parameters
+    ----------
+    vector : torch.Tensor
+        Input tensor.
+    dim : int, optional
+        Dimension along which to compute.
+
+    Returns
+    -------
+    torch.Tensor
+    """
+    return torch.linalg.vector_norm(vector, ord=2, dim=dim)
 
 
 class WL1Loss(nn.Module):
+    """Weighted L1 (MAE) loss.
+
+    Parameters
+    ----------
+    ignore_nan : bool, optional
+        Currently unused. Default: False.
+    """
+
     def __init__(self, ignore_nan=False):
         super().__init__()
         self.mae = nn.L1Loss()
@@ -30,19 +64,36 @@ class WL1Loss(nn.Module):
 
 
 class RMSELoss(nn.Module):
+    """Root Mean Squared Error loss with optional weighting and NaN handling.
+
+    Parameters
+    ----------
+    eps : float, optional
+        Small constant for numerical stability. Default: 1e-6.
+    column : int, optional
+        If set, compute loss only on this output column. Default: None.
+    ignore_nan : bool, optional
+        If True, ignore NaN values in targets. Default: False.
+    """
+
     def __init__(self, eps=1e-6, column=None, ignore_nan=False):
         super().__init__()
         mean_f = torch.mean if not ignore_nan else torch.nanmean
         if not ignore_nan:
+
             def mse(yhat, y):
                 return mean_f((yhat - y) ** 2)
+
             def wmse(yhat, y, w):
                 return mean_f(w * (yhat - y) ** 2)
+
         else:
+
             def mse(yhat, y):
                 nan = torch.isnan(y)
                 y = torch.where(nan, torch.tensor(0.0), y)
                 return mean_f((yhat - y) ** 2)
+
             def wmse(yhat, y, w):
                 nan = torch.isnan(y)
                 y = torch.where(nan, torch.tensor(0.0), y)
@@ -70,21 +121,62 @@ class RMSELoss(nn.Module):
 
 
 def checkpoint_values(dic_values, dic_tmp_values):
+    """Aggregate temporary per-step loss values into the main checkpoint dict.
+
+    Parameters
+    ----------
+    dic_values : dict of list
+        Main loss history (each key maps to a list of scalars).
+    dic_tmp_values : dict of list
+        Temporary per-step tensors to be averaged and appended.
+    """
     for key in dic_values.keys():
         dic_values[key].append(torch.stack(dic_tmp_values[key]).mean().item())
 
 
 def model_params_data(model, hp):
+    """Yield gradient data for all model parameters that have gradients.
+
+    Parameters
+    ----------
+    model : nn.Module
+    hp : AttrDict
+
+    Yields
+    ------
+    torch.Tensor
+        Gradient data (.grad.data) for each parameter.
+    """
     params = model.parameters()
     for p in params:
         try:
             data = p.grad.data
             yield data
-        except:
+        except AttributeError:
             pass
 
 
 def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
+    """Self-adapting loss balancing based on gradient norms.
+
+    Updates lambda weights for each loss term proportionally to the
+    inverse of their gradient norms, with exponential moving average.
+
+    Parameters
+    ----------
+    loss_values : dict
+        Loss name -> list of loss tensors.
+    lambdas : dict
+        Loss name -> list of lambda weights.
+    alpha : float
+        Exponential moving average coefficient (0 < alpha < 1).
+    model : nn.Module
+        The neural network (for gradient computation).
+    hp : AttrDict
+        Hyperparameters.
+    device : str
+        'cuda' or 'cpu'.
+    """
     grad_norms = {}
     keys = loss_values.keys()
     keys = [k for k in keys if hp.losses[k]["loss_balancing"]]
@@ -92,7 +184,9 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
         if lambdas[k][-1] != 0:
             loss_k = loss_values[k][-1]
             loss_k.backward(retain_graph=True)
-            grad_loss_k = torch.cat([p.flatten().clone() for p in model_params_data(model, hp)])
+            grad_loss_k = torch.cat(
+                [p.flatten().clone() for p in model_params_data(model, hp)]
+            )
             grad_norms[k] = Norm2(grad_loss_k)
             if device != "cpu":
                 grad_norms[k] = grad_norms[k].cpu()
@@ -113,7 +207,41 @@ def balancing_loss(loss_values, lambdas, alpha, model, hp, device):
             new_val = 0
         lambdas[k].append(new_val)
 
+
 class DensityEstimator:
+    """Base training class for physics-informed neural networks.
+
+    Manages the full training loop including optimiser setup, learning
+    rate scheduling, loss balancing (self-adapting / ReLoBRaLo),
+    temporal causality weighting, early stopping, and Optuna pruning.
+
+    Subclasses should implement domain-specific PDE loss methods.
+
+    Parameters
+    ----------
+    train : DataPlaceholder
+        Training dataset (also serves as iterator).
+    test : DataPlaceholder
+        Test dataset.
+    model : nn.Module
+        The neural network model.
+    model_hp : AttrDict
+        Hyperparameters dictionary.
+    gpu : bool
+        Whether to use GPU.
+    trial : optuna.Trial, optional
+        Optuna trial for hyperparameter search. Default: None.
+
+    Attributes
+    ----------
+    loss_values : dict
+        Dictionary of loss name -> list of loss values per iteration.
+    lambdas_scalar : dict
+        Dictionary of loss name -> list of loss weights over time.
+    test_scores : list
+        Validation scores recorded every ``test_frequency`` iterations.
+    """
+
     def __init__(self, train, test, model, model_hp, gpu, trial=None):
         self.data = train
         self.test_set = test
@@ -128,6 +256,7 @@ class DensityEstimator:
         self.autocasting()
 
     def setup_optimizer(self):
+        """Instantiate the optimizer (Adam, AdamW, or LBFGS) from hp config."""
         if self.hp.optimizer == "Adam":
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(),
@@ -142,14 +271,16 @@ class DensityEstimator:
             )
         elif self.hp.optimizer == "LBFGS":
             self.optimizer = torch.optim.LBFGS(
-                                self.model.parameters(), 
-                                lr=self.hp.lr, 
-                                tolerance_change=self.hp.eps
-                            )
+                self.model.parameters(), lr=self.hp.lr, tolerance_change=self.hp.eps
+            )
         else:
-            raise NameError("Optimizser not implemented")
+            raise NameError("Optimiser not implemented")
 
     def setup_scheduler(self):
+        """Instantiate the learning rate scheduler.
+
+        Supports StepLR decay and cosine annealing with warm restarts.
+        """
         scheduler_status = True
         if self.hp.learning_rate_decay["status"]:
             step_size = self.hp.learning_rate_decay["step"]
@@ -159,9 +290,9 @@ class DensityEstimator:
                 gamma=self.hp.learning_rate_decay["gamma"],
             )
             scheduler_status = True
-        elif self.hp.cosine_anealing["status"]:
-            self.steps = self.hp.cosine_anealing["step"]
-            self.min_eta = self.hp.cosine_anealing["min_eta"]
+        elif self.hp.cosine_annealing["status"]:
+            self.steps = self.hp.cosine_annealing["step"]
+            self.min_eta = self.hp.cosine_annealing["min_eta"]
             self.times = 0
             scheduler = CosineAnnealingLR(
                 self.optimizer, self.steps, eta_min=self.min_eta
@@ -175,6 +306,11 @@ class DensityEstimator:
             self.scheduler = scheduler
 
     def setup_losses(self):
+        """Build loss functions and lambda weights from hp.losses config.
+
+        Handles multiple-output expansion, temporal causality,
+        and custom PDE loss methods.
+        """
         lambdas = {}
         loss_values = {}
         loss_fn = {}
@@ -186,12 +322,18 @@ class DensityEstimator:
                         for i in range(self.n_outputs):
                             self.hp.losses[f"{key}_{i}"] = self.hp.losses[key].copy()
                             self.hp.losses[f"{key}_{i}"]["method"] = f"{key}_{i}"
-                            
-                            setattr(self, f"{key}_{i}", RMSELoss(column=i, ignore_nan=self.hp.losses[key]["ignore_nan"]))
+
+                            setattr(
+                                self,
+                                f"{key}_{i}",
+                                RMSELoss(
+                                    column=i,
+                                    ignore_nan=self.hp.losses[key]["ignore_nan"],
+                                ),
+                            )
                     del self.hp.losses[key]
                 else:
                     self.hp.losses[key]["multiple_outputs"] = False
-
 
         for key in self.hp.losses.keys():
             if "lambda" in self.hp.losses[key]:
@@ -209,7 +351,7 @@ class DensityEstimator:
                     loss_computation_fn = getattr(self, self.hp.losses[key]["method"])
                     try:
                         penalty_fn = getattr(self, self.hp.losses[key]["penalty"])
-                    except:
+                    except (AttributeError, KeyError):
                         penalty_fn = self.L2
                     bs_loss = self.hp.losses[key]["bs"]
                     if "temporal_causality" not in self.hp.losses[key].keys():
@@ -231,6 +373,20 @@ class DensityEstimator:
         self.test_scores = []
 
     def sum_loss(self, dic_values, dic_lambdas):
+        """Compute weighted sum of all loss terms.
+
+        Parameters
+        ----------
+        dic_values : dict
+            Loss name -> list of loss tensors.
+        dic_lambdas : dict
+            Loss name -> list of lambda weights.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar total loss.
+        """
         loss = 0.0
         for key in dic_lambdas.keys():
             loss += dic_lambdas[key][-1] * dic_values[key][-1]
@@ -241,6 +397,10 @@ class DensityEstimator:
         return loss
 
     def setup_temporal_causality(self):
+        """Initialise temporal causality weights for PDE losses.
+
+        Reads M and eps from hp.temporal_causality config.
+        """
         self.temporal_weights = {}
         for key in self.hp["losses"].keys():
             if "temporal_causality" in self.hp["losses"][key]:
@@ -273,6 +433,28 @@ class DensityEstimator:
     #     return f
 
     def temporal_loss(self, key, residue_computation, bs_loss, penalty):
+        """Build a temporal-causality-weighted loss closure.
+
+        Splits PDE residuals into M temporal bins and applies
+        exponentially decaying causal weights.
+
+        Parameters
+        ----------
+        key : str
+            Loss name (used to store temporal weights).
+        residue_computation : callable
+            Function computing the PDE residual.
+        bs_loss : int
+            Batch size for this loss (must be divisible by M).
+        penalty : callable
+            Norm function (L1 or L2).
+
+        Returns
+        -------
+        callable
+            Loss function with signature f(zhat, z, **kwargs) -> scalar.
+        """
+
         def f(zhat, z, weight=None, **args_dic):
             residue = residue_computation(z, zhat, weight)
             square_res = residue.reshape(self.M, bs_loss // self.M)
@@ -282,9 +464,7 @@ class DensityEstimator:
                 if self.it == 1 or (self.it - 1) % f == 0:
                     shifted_M_loss = torch.zeros_like(M_losses)
                     shifted_M_loss[1:] = M_losses[:-1]
-                    w_i = torch.exp(
-                        -self.eps * torch.cumsum(shifted_M_loss, dim=0)
-                    )
+                    w_i = torch.exp(-self.eps * torch.cumsum(shifted_M_loss, dim=0))
                     w_i.requires_grad_(False)
                     self.temporal_weights[key].append(w_i)
                 else:
@@ -295,10 +475,28 @@ class DensityEstimator:
         return f
 
     def compute_loss(self, zhat, **args_dic):
+        """Evaluate all loss functions and append results to loss_values.
+
+        Parameters
+        ----------
+        zhat : torch.Tensor
+            Model predictions.
+        **args_dic : dict
+            Additional arguments (z=targets, x=inputs, weight=..., etc.).
+        """
         for key in self.hp.losses.keys():
             self.loss_values[key].append(self.loss_fn[key](zhat, **args_dic))
 
     def L1(self, vector, normed=True, dim=None):
+        """Compute (optionally normalised) L1 norm.
+
+        Parameters
+        ----------
+        vector : torch.Tensor
+        normed : bool
+            If True, divide by the number of elements.
+        dim : int, optional
+        """
         result = Norm1(vector, dim=dim)
         if normed:
             if dim is None:
@@ -307,6 +505,15 @@ class DensityEstimator:
         return result
 
     def L2(self, vector, normed=True, dim=None):
+        """Compute (optionally normalised) L2 norm.
+
+        Parameters
+        ----------
+        vector : torch.Tensor
+        normed : bool
+            If True, divide by sqrt(n_elements).
+        dim : int, optional
+        """
         result = Norm2(vector, dim=dim)
         if normed:
             if dim is None:
@@ -315,10 +522,30 @@ class DensityEstimator:
         return result
 
     def standard_loss(self, key, residue_computation, bs_loss, penalty):
+        """Build a standard (non-temporal) PDE loss closure.
+
+        Parameters
+        ----------
+        key : str
+            Loss name.
+        residue_computation : callable
+            Function computing the PDE residual.
+        bs_loss : int
+            Batch size for this loss.
+        penalty : callable
+            Norm function (L1 or L2).
+
+        Returns
+        -------
+        callable
+            Loss function with signature f(zhat, z, **kwargs) -> scalar.
+        """
+
         def f(zhat, z, weight=None, **args_dict):
             residue = residue_computation(zhat, z, weight=weight).flatten()
             loss = penalty(residue, normed=True)
             return loss
+
         return f
 
     def range(self, start, end, step, leave=True):
@@ -328,6 +555,11 @@ class DensityEstimator:
         return iterator_fn(start, end, step)
 
     def loss_balancing(self):
+        """Update loss lambda weights using the configured balancing strategy.
+
+        Supports self-adapting loss balancing (gradient-norm based)
+        and ReLoBRaLo (relative loss balancing with random lookback).
+        """
         if len(self.lambdas_scalar.keys()) == 1:
             pass
         elif self.hp.self_adapting_loss_balancing["status"]:
@@ -374,17 +606,23 @@ class DensityEstimator:
                         self.lambdas_scalar[key].append(l_i.item())
 
     def clip_gradients(self):
+        """Clip gradient norms to max_norm=1.0 if enabled in config."""
         if self.hp.clip_gradients:
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
     def scheduler_update(self):
+        """Step the learning rate scheduler.
+
+        For cosine annealing with warm restarts, halves the learning
+        rate and minimum eta after each full cycle.
+        """
         self.lr_list.append(self.scheduler.get_last_lr()[0])
         self.scheduler.step()
 
-        if self.hp.cosine_anealing["status"]:
+        if self.hp.cosine_annealing["status"]:
             # it starts on the end of the it number
             first_it = self.it == 1
-            it_after = (self.it - 1) % self.hp.cosine_anealing["step"] == 0
+            it_after = (self.it - 1) % self.hp.cosine_annealing["step"] == 0
             if not first_it and it_after:
                 self.times += 1
                 for g in self.optimizer.param_groups:
@@ -395,6 +633,12 @@ class DensityEstimator:
                 )
 
     def update_description_bar(self, train_iterator):
+        """Update tqdm progress bar with current loss values.
+
+        Parameters
+        ----------
+        train_iterator : tqdm iterator
+        """
         text = f"Iterations [{self.it}/{self.hp.max_iters}]"
         for key in self.hp["losses"].keys():
             if self.hp["losses"][key]["report"]:
@@ -406,9 +650,22 @@ class DensityEstimator:
         train_iterator.set_description(text)
 
     def largest_bs(self):
+        """Return the largest batch size among all configured losses.
+
+        Returns
+        -------
+        int
+        """
         return max([self.hp["losses"][key]["bs"] for key in self.hp["losses"].keys()])
 
     def test_loop(self):
+        """Run inference on the full test set in batches.
+
+        Returns
+        -------
+        torch.Tensor
+            Concatenated predictions.
+        """
         bs = self.largest_bs()
         batch_idx = torch.arange(0, self.n_test, dtype=int, device=self.device)
 
@@ -423,12 +680,25 @@ class DensityEstimator:
         return torch.cat(predictions)
 
     def write(self, text):
+        """Print text using tqdm.write (if verbose) or plain print.
+
+        Parameters
+        ----------
+        text : str
+        """
         if self.hp.verbose:
             tqdm.write(text)
         else:
             print(text)
 
     def predict_test(self):
+        """Evaluate the model on the test set.
+
+        Returns
+        -------
+        float
+            Test loss value.
+        """
         with torch.no_grad():
             predictions = self.test_loop()
             loss_fn = self.loss_fn[self.hp.validation_loss]
@@ -440,6 +710,13 @@ class DensityEstimator:
         return test_loss
 
     def test_and_maybe_save(self, it):
+        """Evaluate on test set and save model if it's the best so far.
+
+        Parameters
+        ----------
+        it : int
+            Current iteration number.
+        """
         if it == 1:
             if self.hp.save_model:
                 torch.save(self.model.state_dict(), self.hp.pth_name)
@@ -455,6 +732,13 @@ class DensityEstimator:
             self.test_scores.append(test_score)
 
     def optuna_stop(self, it):
+        """Report to Optuna and raise TrialPruned if pruning is triggered.
+
+        Parameters
+        ----------
+        it : int
+            Current iteration number.
+        """
         start = self.hp.optuna["patience"]
         if (
             self.trial
@@ -472,10 +756,27 @@ class DensityEstimator:
                 raise optuna.exceptions.TrialPruned()
 
     def convert_last_loss_value(self):
+        """Convert the last loss tensor in each loss list to a Python float."""
         for k in self.loss_values.keys():
             self.loss_values[k][-1] = self.loss_values[k][-1].item()
 
     def early_stop(self, it, loss, break_loop):
+        """Check early stopping conditions.
+
+        Parameters
+        ----------
+        it : int
+            Current iteration.
+        loss : torch.Tensor
+            Current total loss (checked for NaN).
+        break_loop : bool
+            Incoming break flag.
+
+        Returns
+        -------
+        bool
+            True if training should stop.
+        """
         if torch.isnan(loss):
             break_loop = True
             print("Loss has become NaN, stopping...")
@@ -493,6 +794,11 @@ class DensityEstimator:
         return break_loop
 
     def autocasting(self):
+        """Configure mixed-precision autocasting settings.
+
+        Uses bfloat16 on CPU, float16 on CUDA. Disabled for WIRES
+        (complex dtypes incompatible with AMP).
+        """
         if self.device == "cpu":
             dtype = torch.bfloat16
         else:
@@ -503,18 +809,32 @@ class DensityEstimator:
         self.dtype = dtype
 
     def load_best_model(self):
+        """Reload the best model checkpoint from disk."""
         self.model.load_state_dict(
             torch.load(self.hp.pth_name, map_location=self.device)
         )
 
     def setup_validation_loss(self):
+        """Ensure the validation loss function exists in self.loss_fn.
+
+        Creates it if the validation loss key wasn't in hp.losses.
+        """
         if self.hp.validation_loss not in self.loss_fn:
             if self.hp.validation_loss == "mse":
-                self.loss_fn[self.hp.validation_loss] = RMSELoss(ignore_nan=self.hp.ignore_nan)
+                self.loss_fn[self.hp.validation_loss] = RMSELoss(
+                    ignore_nan=self.hp.ignore_nan
+                )
             elif self.hp.validation_loss == "mae":
                 self.loss_fn[self.hp.validation_loss] = WL1Loss()
 
     def fit(self):
+        """Run the full training loop.
+
+        Sets up optimiser, scheduler, losses, and iterates for
+        hp.max_iters steps. Handles mixed-precision training,
+        gradient clipping, loss balancing, early stopping, and
+        model checkpointing.
+        """
         scaler = torch.amp.GradScaler(self.device, enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()

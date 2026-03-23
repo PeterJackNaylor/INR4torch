@@ -1,15 +1,39 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
+from typing import Optional, Tuple, Callable, Type, TYPE_CHECKING
 
-def check_model_hp(hp):
+if TYPE_CHECKING:
+    import optuna
+    from .parser import AttrDict
+    from .density_estimation import DensityEstimator
+    from .data_loader import DataPlaceholder
+
+
+def check_model_hp(hp: AttrDict) -> AttrDict:
+    """Set default values for model-related hyperparameters.
+
+    Defaults: linear='HE', eps=1e-8, clip_gradients=True,
+    cosine_annealing=off, relobralo=off.
+
+    Parameters
+    ----------
+    hp : AttrDict
+
+    Returns
+    -------
+    AttrDict
+        hp with defaults filled in.
+    """
     if "linear" not in hp.model:
         hp.model["linear"] = "HE"
     if "eps" not in hp:
-        hp.eps = 1.e-8
+        hp.eps = 1.0e-8
     if "clip_gradients" not in hp:
         hp.clip_gradients = True
-    if "cosine_anealing" not in hp:
-        hp.cosine_anealing = {"status": False, "min_eta": 0, "step": 500}
+    if "cosine_annealing" not in hp:
+        hp.cosine_annealing = {"status": False, "min_eta": 0, "step": 500}
     if "relobralo" not in hp:
         hp.relobralo = {
             "status": False,
@@ -20,7 +44,20 @@ def check_model_hp(hp):
         }
     return hp
 
-def check_data_loader_hp(hp):
+
+def check_data_loader_hp(hp: AttrDict) -> AttrDict:
+    """Set default values for data-loader-related hyperparameters.
+
+    Defaults: model.name='default', hard_periodicity=False.
+
+    Parameters
+    ----------
+    hp : AttrDict
+
+    Returns
+    -------
+    AttrDict
+    """
     if "model" in hp:
         if "name" not in hp.model:
             hp.model["name"] = "default"
@@ -30,7 +67,20 @@ def check_data_loader_hp(hp):
         hp.hard_periodicity = False
     return hp
 
-def check_estimator_hp(hp):
+
+def check_estimator_hp(hp: AttrDict) -> AttrDict:
+    """Set default values for estimator-related hyperparameters.
+
+    Defaults: verbose=True, optuna patience/trials, save_model=False.
+
+    Parameters
+    ----------
+    hp : AttrDict
+
+    Returns
+    -------
+    AttrDict
+    """
     if "verbose" not in hp:
         hp.verbose = True
     if "optuna" not in hp:
@@ -41,17 +91,47 @@ def check_estimator_hp(hp):
     #     hp.npz_name = "default.npz"
     # if "pth_name" not in hp:
     #     hp.pth_name = "default.pth"
-    return hp   
+    return hp
+
 
 def train(
-    hp,
-    estimate_density_cl,
-    dataset_fn,
-    model_cl,
-    initial_weights=None,
-    trial=None,
-    gpu=False,
-):
+    hp: AttrDict,
+    estimate_density_cl: Type[DensityEstimator],
+    dataset_fn: Callable[[AttrDict, bool], Tuple[DataPlaceholder, DataPlaceholder]],
+    model_cl: Callable,
+    initial_weights: Optional[str] = None,
+    trial: Optional[optuna.Trial] = None,
+    gpu: bool = False,
+) -> Tuple[DensityEstimator, AttrDict]:
+    """High-level training function for PINN models.
+
+    Orchestrates data loading, model creation, and training. Mutates
+    hp to add input_size, output_size, nv_samples, and nv_targets.
+
+    Parameters
+    ----------
+    hp : AttrDict
+        Hyperparameter dictionary loaded from YAML.
+    estimate_density_cl : class
+        A DensityEstimator subclass implementing domain-specific losses.
+    dataset_fn : callable
+        Function(hp, gpu=False) -> (train_dataset, test_dataset).
+    model_cl : class or callable
+        Model constructor: model_cl(name, input_size, output_size, hp) -> nn.Module.
+    initial_weights : str, optional
+        Path to .pth file for weight initialisation. Default: None.
+    trial : optuna.Trial, optional
+        Optuna trial for hyperparameter search. Default: None.
+    gpu : bool, optional
+        Whether to use GPU. Default: False.
+
+    Returns
+    -------
+    NN : DensityEstimator
+        Trained estimator with model, loss history, etc.
+    hp : AttrDict
+        Updated hyperparameters (with input/output sizes, normalisation values).
+    """
     hp = check_data_loader_hp(hp)
     hp = check_model_hp(hp)
     hp = check_estimator_hp(hp)

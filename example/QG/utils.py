@@ -12,6 +12,7 @@ def CheckOrCreate(folder):
     except:
         pass
 
+
 def predict(array, model):
     n_data = array.shape[0]
     verbose = model.hp.verbose
@@ -36,6 +37,7 @@ def predict(array, model):
                 preds.append(pred)
     preds = torch.cat(preds)
     return preds
+
 
 def model_plot(NN, samples, targets, model_hp, ts, x, y, z, L, interval):
     n = len(NN.test_scores)
@@ -79,7 +81,6 @@ def model_plot(NN, samples, targets, model_hp, ts, x, y, z, L, interval):
             t_weights = torch.column_stack(NN.temporal_weights[key])
             x_axis = t_weights.shape[1]  # because we will remove the first one
             x_axis = list(range(0, x_axis * f, f))
-            import pdb; pdb.set_trace()
             if "cuda" in str(t_weights.device):
                 t_weights = t_weights.cpu()
             color = cm.hsv(np.linspace(0, 1, t_weights.shape[0]))
@@ -104,9 +105,12 @@ def model_plot(NN, samples, targets, model_hp, ts, x, y, z, L, interval):
         ax1.scatter(x, y, c=targets, s=3.5, vmin=vlim[0], vmax=vlim[1], cmap="RdBu_r")
         ax1.set_xlim([0, L])
         ax1.set_ylim([0, L])
-        ax2.imshow(z[::-1, :, t_idx], vmin=vlim[0], vmax=vlim[1], extent=extent, cmap="RdBu_r")
+        ax2.imshow(
+            z[::-1, :, t_idx], vmin=vlim[0], vmax=vlim[1], extent=extent, cmap="RdBu_r"
+        )
         ax3.scatter(x, y, c=targets, s=3.5, vmin=vlim[0], vmax=vlim[1], cmap="RdBu_r")
-        ax3.imshow(z[::-1, :, t_idx], vmin=vlim[0], vmax=vlim[1], extent=extent, cmap="RdBu_r")
+        ax3.imshow(
+            z[::-1, :, t_idx], vmin=vlim[0], vmax=vlim[1], extent=extent, cmap="RdBu_r"
+        )
         fig.savefig(f"single_run/train_health/checking_scatter_time_{round(t,1)}.png")
         plt.close()
-

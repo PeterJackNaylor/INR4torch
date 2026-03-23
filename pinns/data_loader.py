@@ -5,6 +5,49 @@ from torch.utils.data import Dataset
 
 
 class DataPlaceholder(Dataset):
+    """Base dataset for PINN training with built-in normalisation and batching.
+
+    Loads data from a NumPy .npy/.npz file, normalises inputs and targets
+    to [-1, 1], and provides an iterator interface for mini-batch training.
+
+    Parameters
+    ----------
+    path : str
+        Path to a .npy file containing the data array.
+    nv_samples : list of tuple, optional
+        Pre-computed normalisation values for inputs as [(mean, scale), ...].
+        If None, computed from data.
+    nv_targets : list of tuple, optional
+        Pre-computed normalisation values for targets.
+    normalise_targets : bool, optional
+        Whether to normalise target values. Default: True.
+    gpu : bool, optional
+        Whether to move data to GPU. Default: False.
+    need_target : bool, optional
+        Whether target values are present. Default: True.
+    bs : int, optional
+        Batch size. Default: 1.
+    temporal_causality : bool, optional
+        Whether to set up temporal causality bins. Default: False.
+    M : int, optional
+        Number of temporal bins for causality. Default: 32.
+
+    Attributes
+    ----------
+    samples : torch.Tensor
+        Normalised input coordinates.
+    targets : torch.Tensor
+        Normalised target values (if need_target=True).
+    nv_samples : list of tuple
+        Normalisation values for inputs: [(center, half_range), ...].
+    nv_targets : list of tuple
+        Normalisation values for targets.
+    input_size : int
+        Number of input dimensions.
+    output_size : int
+        Number of output dimensions.
+    """
+
     def __init__(
         self,
         path,
@@ -14,13 +57,14 @@ class DataPlaceholder(Dataset):
         gpu=False,
         need_target=True,
         bs=1,
-        temporal_causality=False,
-        M=32,
+        # temporal_causality=False,
+        # M=32,
     ):
         self.need_target = need_target
         self.input_size = 3
         self.output_size = 1
         self.bs = bs
+        self.test = False
 
         pc = np.load(path)
         samples, targets = self.setup_data(pc)
@@ -39,17 +83,43 @@ class DataPlaceholder(Dataset):
 
         self.setup_cuda(gpu)
         self.setup_batch_idx()
-        if temporal_causality:
-            self.temporal_causality = temporal_causality
-            self.M = M
-            self.setup_temporal_causality()
+        # if temporal_causality:
+        #     self.temporal_causality = temporal_causality
+        #     self.M = M
+        #     self.setup_temporal_causality()
 
     def setup_data(self, pc):
+        """Extract samples and targets from raw loaded data.
+
+        Override this in subclasses to define how raw numpy data is split
+        into input coordinates and target values.
+
+        Parameters
+        ----------
+        pc : np.ndarray
+            Raw data loaded from the .npy file.
+
+        Returns
+        -------
+        samples : np.ndarray
+            Input coordinates, shape (n_samples, input_dims).
+        targets : np.ndarray
+            Target values, shape (n_samples, output_dims).
+        """
         samples = pc[:, 0].astype(np.float32)
         targets = pc[:, 1].astype(np.float32)
         return samples, targets
 
     def setup_cuda(self, gpu):
+        """Move data to GPU/CPU and set dtype.
+
+        Uses float16 on CUDA, bfloat16 on CPU.
+
+        Parameters
+        ----------
+        gpu : bool
+            Whether to use GPU.
+        """
         if gpu:
             dtype = torch.float16
             device = "cuda"
@@ -64,6 +134,22 @@ class DataPlaceholder(Dataset):
         self.dtype = dtype
 
     def normalize(self, vector, nv, include_last=True):
+        """Normalise columns of a 2D array to [-1, 1].
+
+        Parameters
+        ----------
+        vector : np.ndarray
+            2D array of shape (n_samples, n_features).
+        nv : list of tuple or None
+            Existing normalisation values. If None, computed from data.
+        include_last : bool, optional
+            Whether to normalise the last column. Default: True.
+
+        Returns
+        -------
+        list of tuple
+            Normalisation values [(center, half_range), ...].
+        """
         c = vector.shape[1]
         if nv is None:
             nv = []
@@ -72,6 +158,8 @@ class DataPlaceholder(Dataset):
                     break
                 m = (vect.max() + vect.min()) / 2
                 s = (vect.max() - vect.min()) / 2
+                if s == 0:
+                    s = 1.0
                 nv.append((m, s))
 
         for i in range(c):
@@ -94,6 +182,17 @@ class DataPlaceholder(Dataset):
         # return sample, target
 
     def __next__(self):
+        """Return the next mini-batch.
+
+        For training (self.test=False): wraps around with re-shuffling
+        when the epoch boundary is crossed.
+        For testing (self.test=True): raises StopIteration at the end.
+
+        Returns
+        -------
+        dict
+            {'x': samples_batch} or {'x': samples_batch, 'z': targets_batch}.
+        """
         if self.last_idx + self.bs <= self.__len__():
             idx_bs = self.batch_idx[self.last_idx : (self.last_idx + self.bs)]
             self.last_idx += self.bs
@@ -110,6 +209,10 @@ class DataPlaceholder(Dataset):
                 return self.__getitem__(idx_bs)
 
     def setup_batch_idx(self):
+        """Initialise batch index ordering.
+
+        Creates a random permutation for training or sequential index for testing.
+        """
         self.last_idx = 0
         self.idx_max = self.__len__() // self.bs
         if not self.test:
@@ -117,11 +220,12 @@ class DataPlaceholder(Dataset):
         else:
             self.batch_idx = torch.arange(0, self.__len__(), device=self.device)
 
-    def setup_temporal_causality(self):
-        time = self.samples[:, -1]
-        start, end = time.min(), time.max()
-        step = (end - start) / self.M
-        self.q_time = torch.round(time / step) * step
+    # def setup_temporal_causality(self):
+    #     """Quantise time values into M temporal bins for causal training.
 
-        # import pdb; pdb.set_trace()
-        # temporal_values = torch.arange(start, end + step, step=step)
+    #     Stores quantised time indices in self.q_time.
+    #     """
+    #     time = self.samples[:, -1]
+    #     start, end = time.min(), time.max()
+    #     step = (end - start) / self.M
+    #     self.q_time = torch.round(time / step) * step
