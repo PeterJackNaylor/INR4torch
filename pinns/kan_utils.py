@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+import math
+
 import torch
 import torch.nn.functional as F
-import math
 
 
 class KANLinear(torch.nn.Module):
@@ -42,18 +45,18 @@ class KANLinear(torch.nn.Module):
 
     def __init__(
         self,
-        in_features,
-        out_features,
-        grid_size=5,
-        spline_order=3,
-        scale_noise=0.1,
-        scale_base=1.0,
-        scale_spline=1.0,
-        enable_standalone_scale_spline=True,
-        base_activation=torch.nn.SiLU,
-        grid_eps=0.02,
-        grid_range=[-1, 1],
-    ):
+        in_features: int,
+        out_features: int,
+        grid_size: int = 5,
+        spline_order: int = 3,
+        scale_noise: float = 0.1,
+        scale_base: float = 1.0,
+        scale_spline: float = 1.0,
+        enable_standalone_scale_spline: bool = True,
+        base_activation: type[torch.nn.Module] = torch.nn.SiLU,
+        grid_eps: float = 0.02,
+        grid_range: list[float] = [-1, 1],
+    ) -> None:
         super(KANLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -89,7 +92,7 @@ class KANLinear(torch.nn.Module):
 
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         torch.nn.init.kaiming_uniform_(
             self.base_weight, a=math.sqrt(5) * self.scale_base
         )
@@ -115,7 +118,7 @@ class KANLinear(torch.nn.Module):
                     self.spline_scaler, a=math.sqrt(5) * self.scale_spline
                 )
 
-    def b_splines(self, x: torch.Tensor):
+    def b_splines(self, x: torch.Tensor) -> torch.Tensor:
         """
         Compute the B-spline bases for the given input tensor.
 
@@ -150,7 +153,7 @@ class KANLinear(torch.nn.Module):
         )
         return bases.contiguous()
 
-    def curve2coeff(self, x: torch.Tensor, y: torch.Tensor):
+    def curve2coeff(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Compute the coefficients of the curve that interpolates the given points.
 
@@ -183,14 +186,14 @@ class KANLinear(torch.nn.Module):
         return result.contiguous()
 
     @property
-    def scaled_spline_weight(self):
+    def scaled_spline_weight(self) -> torch.Tensor:
         return self.spline_weight * (
             self.spline_scaler.unsqueeze(-1)
             if self.enable_standalone_scale_spline
             else 1.0
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert x.size(-1) == self.in_features
         original_shape = x.shape
         x = x.view(-1, self.in_features)
@@ -206,7 +209,7 @@ class KANLinear(torch.nn.Module):
         return output
 
     @torch.no_grad()
-    def update_grid(self, x: torch.Tensor, margin=0.01):
+    def update_grid(self, x: torch.Tensor, margin: float = 0.01) -> None:
         assert x.dim() == 2 and x.size(1) == self.in_features
         batch = x.size(0)
 
@@ -254,7 +257,9 @@ class KANLinear(torch.nn.Module):
         self.grid.copy_(grid.T)
         self.spline_weight.data.copy_(self.curve2coeff(x, unreduced_spline_output))
 
-    def regularization_loss(self, regularize_activation=1.0, regularize_entropy=1.0):
+    def regularization_loss(
+        self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0
+    ) -> torch.Tensor:
         """
         Compute the regularization loss.
 
@@ -297,16 +302,16 @@ class KAN(torch.nn.Module):
 
     def __init__(
         self,
-        layers_hidden,
-        grid_size=5,
-        spline_order=3,
-        scale_noise=0.1,
-        scale_base=1.0,
-        scale_spline=1.0,
-        base_activation=torch.nn.SiLU,
-        grid_eps=0.02,
-        grid_range=[-1, 1],
-    ):
+        layers_hidden: list[int],
+        grid_size: int = 5,
+        spline_order: int = 3,
+        scale_noise: float = 0.1,
+        scale_base: float = 1.0,
+        scale_spline: float = 1.0,
+        base_activation: type[torch.nn.Module] = torch.nn.SiLU,
+        grid_eps: float = 0.02,
+        grid_range: list[float] = [-1, 1],
+    ) -> None:
         super(KAN, self).__init__()
         self.grid_size = grid_size
         self.spline_order = spline_order
@@ -328,14 +333,16 @@ class KAN(torch.nn.Module):
                 )
             )
 
-    def forward(self, x: torch.Tensor, update_grid=False):
+    def forward(self, x: torch.Tensor, update_grid: bool = False) -> torch.Tensor:
         for layer in self.layers:
             if update_grid:
                 layer.update_grid(x)
             x = layer(x)
         return x
 
-    def regularization_loss(self, regularize_activation=1.0, regularize_entropy=1.0):
+    def regularization_loss(
+        self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0
+    ) -> torch.Tensor:
         return sum(
             layer.regularization_loss(regularize_activation, regularize_entropy)
             for layer in self.layers

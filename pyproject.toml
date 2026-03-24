@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "INR4torch"
@@ -58,6 +58,9 @@ Issues = "https://github.com/PeterJackNaylor/INR4torch/issues"
 
 [tool.setuptools.packages.find]
 include = ["pinns*"]
+
+[tool.setuptools.package-data]
+pinns = ["configs/*.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

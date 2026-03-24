@@ -1,6 +1,10 @@
+# Core dependencies
 numpy
 tqdm
 scipy
 torch
 optuna
-matplotlib
+pyyaml
+
+# Optional (for examples)
+# matplotlib

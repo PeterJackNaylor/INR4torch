@@ -13,9 +13,9 @@ from example_model import return_model_advection as model
 
 torch.set_float32_matmul_precision("high")
 if sys.argv[1] == "default":
-    param_file = "../../default-parameters.yml"
+    param_file = "../../pinn/configs/default-parameters.yml"
 elif sys.argv[1] == "kan":
-    param_file = "../../default-kan.yml"
+    param_file = "../../pinn/configs/default-kan.yml"
 model_hp = pinns.read_yaml(param_file)
 c = model_hp.c
 real_u, real_t, real_x = get_dataset(c=c, n_t=200, n_x=128)
@@ -44,7 +44,11 @@ if gpu:
 predictions = predictions.reshape((xx.shape[0], tt.shape[0])).numpy()
 gt = real_u
 
-mse = np.linalg.norm(gt - predictions) ** 2 / predictions.shape[0] / NN.data.nv_targets[0][1]
+mse = (
+    np.linalg.norm(gt - predictions) ** 2
+    / predictions.shape[0]
+    / NN.data.nv_targets[0][1]
+)
 
 print("##########################")
 print("#       MSE ERROR :      #")

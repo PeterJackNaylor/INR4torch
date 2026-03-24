@@ -68,7 +68,6 @@ class ComputeAdvection(object):
         q = self.ssh2q("x", "y", "t", dpsi_dx, dpsi_dy)
         dq_dt = self.gradt_q(q)
         J1, J2 = self.advection(q, dpsi_dx, dpsi_dy)
-        # import pdb; pdb.set_trace()
         return dq_dt + J1 - J2
 
     def psi_prime(self, x, y, t):
@@ -224,7 +223,6 @@ def advection_residue(model, x, y, t, hp, pinns_b):
 
     # gradients_not = ComputeAdvection(model, lat, lon, t, dlat, dlon, dt, alpha, alpha_lat, alpha_lon, alpha_t, not pinns_b)
     # gradients_not.compute_gradients()
-    # import pdb; pdb.set_trace()
 
     return residue
 

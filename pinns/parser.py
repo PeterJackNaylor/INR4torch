@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import yaml
 
 
@@ -18,7 +20,7 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-def read_yaml(path):
+def read_yaml(path: str) -> AttrDict:
     """Load a YAML configuration file as an AttrDict.
 
     Parameters

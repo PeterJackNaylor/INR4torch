@@ -1,9 +1,19 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 
 
 def gen_uniform(
-    bs, device, start=-1, end=1, temporal_scheme=False, M=None, dtype=torch.float32
-):
+    bs: int,
+    device: str | torch.device,
+    start: float = -1,
+    end: float = 1,
+    temporal_scheme: bool = False,
+    M: Optional[int] = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
     """Generate uniform random samples, optionally with temporal stratification.
 
     Parameters

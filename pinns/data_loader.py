@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 import numpy as np
-
 from torch.utils.data import Dataset
 
 
@@ -50,16 +53,16 @@ class DataPlaceholder(Dataset):
 
     def __init__(
         self,
-        path,
-        nv_samples=None,
-        nv_targets=None,
-        normalise_targets=True,
-        gpu=False,
-        need_target=True,
-        bs=1,
+        path: str,
+        nv_samples: Optional[list[tuple[float, float]]] = None,
+        nv_targets: Optional[list[tuple[float, float]]] = None,
+        normalise_targets: bool = True,
+        gpu: bool = False,
+        need_target: bool = True,
+        bs: int = 1,
         # temporal_causality=False,
         # M=32,
-    ):
+    ) -> None:
         self.need_target = need_target
         self.input_size = 3
         self.output_size = 1
@@ -88,7 +91,7 @@ class DataPlaceholder(Dataset):
         #     self.M = M
         #     self.setup_temporal_causality()
 
-    def setup_data(self, pc):
+    def setup_data(self, pc: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Extract samples and targets from raw loaded data.
 
         Override this in subclasses to define how raw numpy data is split
@@ -110,7 +113,7 @@ class DataPlaceholder(Dataset):
         targets = pc[:, 1].astype(np.float32)
         return samples, targets
 
-    def setup_cuda(self, gpu):
+    def setup_cuda(self, gpu: bool) -> None:
         """Move data to GPU/CPU and set dtype.
 
         Uses float16 on CUDA, bfloat16 on CPU.
@@ -133,7 +136,12 @@ class DataPlaceholder(Dataset):
         self.device = device
         self.dtype = dtype
 
-    def normalize(self, vector, nv, include_last=True):
+    def normalize(
+        self,
+        vector: np.ndarray,
+        nv: Optional[list[tuple[float, float]]],
+        include_last: bool = True,
+    ) -> list[tuple[float, float]]:
         """Normalise columns of a 2D array to [-1, 1].
 
         Parameters
@@ -169,10 +177,10 @@ class DataPlaceholder(Dataset):
 
         return nv
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.samples.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: torch.Tensor | int) -> dict[str, torch.Tensor]:
         sample = self.samples[idx]
         if not self.need_target:
             # return sample
@@ -181,7 +189,7 @@ class DataPlaceholder(Dataset):
         return {"x": sample, "z": target}
         # return sample, target
 
-    def __next__(self):
+    def __next__(self) -> dict[str, torch.Tensor]:
         """Return the next mini-batch.
 
         For training (self.test=False): wraps around with re-shuffling
@@ -208,7 +216,7 @@ class DataPlaceholder(Dataset):
                 self.last_idx = rest
                 return self.__getitem__(idx_bs)
 
-    def setup_batch_idx(self):
+    def setup_batch_idx(self) -> None:
         """Initialise batch index ordering.
 
         Creates a random permutation for training or sequential index for testing.

@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 from functools import partial
+from typing import Optional, Type, Callable
+
 import torch
 import torch.nn as nn
 from numpy import sqrt
 import torch.jit as jit
 import torch._dynamo
-from typing import Optional
+
 from .kan_utils import KAN
 
 
@@ -23,14 +27,20 @@ class Linear(nn.Module):
         Activation function class. Default: nn.Tanh.
     """
 
-    def __init__(self, size_in, size_out, is_last=False, act=nn.Tanh):
+    def __init__(
+        self,
+        size_in: int,
+        size_out: int,
+        is_last: bool = False,
+        act: Type[nn.Module] = nn.Tanh,
+    ) -> None:
         super().__init__()
         self.is_last = is_last
         self.layer = torch.nn.Linear(size_in, size_out)
         if not is_last:
             self.layer = nn.Sequential(self.layer, act())
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -49,7 +59,13 @@ class LinearLayerGlorot(nn.Module):
         Activation function class. Default: nn.Tanh.
     """
 
-    def __init__(self, size_in, size_out, is_last=False, act=nn.Tanh):
+    def __init__(
+        self,
+        size_in: int,
+        size_out: int,
+        is_last: bool = False,
+        act: Type[nn.Module] = nn.Tanh,
+    ) -> None:
         super().__init__()
         self.layer = nn.Linear(size_in, size_out, bias=True)
         self.weights = nn.Parameter(
@@ -65,7 +81,7 @@ class LinearLayerGlorot(nn.Module):
         if not is_last:
             self.layer = nn.Sequential(self.layer, act())
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -91,7 +107,15 @@ class LinearLayerRWF(nn.Module):
         Activation function class. Default: nn.Tanh.
     """
 
-    def __init__(self, size_in, size_out, mean, std, is_last=False, act=nn.Tanh):
+    def __init__(
+        self,
+        size_in: int,
+        size_out: int,
+        mean: float,
+        std: float,
+        is_last: bool = False,
+        act: Type[nn.Module] = nn.Tanh,
+    ) -> None:
         super().__init__()
 
         self.layer = torch.nn.Linear(size_in, size_out)
@@ -116,7 +140,7 @@ class LinearLayerRWF(nn.Module):
         if not is_last:
             self.layer = nn.Sequential(self.layer, act())
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -142,7 +166,9 @@ class RFFLayer(jit.ScriptModule):
     Frequency Functions in Low Dimensional Domains." NeurIPS 2020.
     """
 
-    def __init__(self, input_channel_size, mapping_size, sigma):
+    def __init__(
+        self, input_channel_size: int, mapping_size: int, sigma: float
+    ) -> None:
         super(RFFLayer, self).__init__()
         self.layer = nn.Linear(input_channel_size, mapping_size // 2, bias=False)
         B = torch.normal(0, sigma, (mapping_size // 2, input_channel_size))
@@ -203,12 +229,12 @@ class SirenLayer(jit.ScriptModule):
 
     def __init__(
         self,
-        in_f,
-        out_f,
-        is_first=False,
-        is_last=False,
-        w0=30,
-    ):
+        in_f: int,
+        out_f: int,
+        is_first: bool = False,
+        is_last: bool = False,
+        w0: int = 30,
+    ) -> None:
         super().__init__()
 
         self.in_f = in_f
@@ -218,7 +244,7 @@ class SirenLayer(jit.ScriptModule):
         self.is_last = is_last
         self.init_weights()
 
-    def init_weights(self):
+    def init_weights(self) -> None:
         b = 1 / self.in_f if self.is_first else sqrt(6 / self.in_f) / self.w0
         with torch.no_grad():
             self.linear.weight.uniform_(-b, b)
@@ -231,7 +257,9 @@ class SirenLayer(jit.ScriptModule):
 
 
 # @torch.jit.script
-def wires(x, omega_0, scale_0):
+def wires(
+    x: torch.Tensor, omega_0: torch.Tensor, scale_0: torch.Tensor
+) -> torch.Tensor:
     """Complex Gabor wavelet activation function.
 
     Computes exp(i * omega_0 * x - |scale_0 * x|^2).
@@ -286,14 +314,14 @@ class ComplexGaborLayer(jit.ScriptModule):
 
     def __init__(
         self,
-        in_f,
-        out_f,
-        is_first=False,
-        is_last=False,
-        omega0=10.0,
-        sigma0=40.0,
-        trainable=True,
-    ):
+        in_f: int,
+        out_f: int,
+        is_first: bool = False,
+        is_last: bool = False,
+        omega0: float = 10.0,
+        sigma0: float = 40.0,
+        trainable: bool = True,
+    ) -> None:
         super().__init__()
         self.in_f = in_f
         if is_first:
@@ -344,8 +372,14 @@ class MFN_Layer(nn.Module):
     """
 
     def __init__(
-        self, in_f, out_f, is_first=False, is_last=False, in_f0=2, act=nn.Tanh
-    ):
+        self,
+        in_f: int,
+        out_f: int,
+        is_first: bool = False,
+        is_last: bool = False,
+        in_f0: int = 2,
+        act: Type[nn.Module] = nn.Tanh,
+    ) -> None:
         super().__init__()
         self.is_first = is_first
         self.is_last = is_last
@@ -382,11 +416,11 @@ class MFN(nn.Module):
     Fathony, R. et al. "Multiplicative Filter Networks." ICLR 2021.
     """
 
-    def __init__(self, model, hp):
+    def __init__(self, model: nn.Sequential, hp: object) -> None:
         super().__init__()
         self.model = model
 
-    def forward(self, *args):
+    def forward(self, *args: torch.Tensor) -> torch.Tensor:
         x0 = torch.cat(args, dim=1)
         for i, layer in enumerate(self.model):
             if i == 0:
@@ -409,8 +443,8 @@ class SkipLayer(jit.ScriptModule):
 
     def __init__(
         self,
-        layer,
-    ):
+        layer: nn.Module,
+    ) -> None:
         super().__init__()
         self.layer = layer
 
@@ -443,10 +477,10 @@ class ModifiedMLP(nn.Module):
 
     def __init__(
         self,
-        model,
-        act,
-        hp,
-    ):
+        model: nn.Sequential,
+        act: Type[nn.Module],
+        hp: object,
+    ) -> None:
         super().__init__()
         self.hp = hp
         self.model = model
@@ -464,7 +498,7 @@ class ModifiedMLP(nn.Module):
         self.U = linear_layer_fn(input_size, self.hp.model["hidden_width"])
         self.V = linear_layer_fn(input_size, self.hp.model["hidden_width"])
 
-    def forward(self, *args):
+    def forward(self, *args: torch.Tensor) -> torch.Tensor:
         x = torch.cat(args, dim=1)
         for i, layer in enumerate(self.model):
             if i <= self.layer_uv or i == self.n - 1:
@@ -477,7 +511,7 @@ class ModifiedMLP(nn.Module):
         return x
 
 
-def linear_fn(text, hp, act):
+def linear_fn(text: str, hp: object, act: Optional[Type[nn.Module]]) -> Callable:
     """Factory function returning the appropriate layer constructor.
 
     Parameters
