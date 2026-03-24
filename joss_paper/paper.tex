@@ -1,0 +1,175 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{url}
+
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{red!70!black},
+  breaklines=true,
+  frame=single,
+  columns=fullflexible
+}
+
+\title{INR4torch: A Modular PyTorch Framework for Physics-Informed Neural Networks with Implicit Neural Representations}
+
+\author{Peter Naylor\thanks{Corresponding author. Email: peter.jack.naylor@gmail.com}\\
+\textit{$\Phi$-lab, ESRIN, ESA, Frascati, Italy}}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present INR4torch, an open-source Python package that provides a modular and extensible framework for solving partial differential equations (PDEs) using Physics-Informed Neural Networks (PINNs) built on Implicit Neural Representations (INRs). The package supports five neural architectures---SIREN, Random Fourier Features, WIRES, Multiplicative Filter Networks, and Kolmogorov--Arnold Networks---under a unified interface that allows researchers to swap models via configuration without modifying application code. INR4torch includes advanced training techniques such as self-adapting loss balancing, temporal causality weighting, and mixed-precision training, alongside integrated hyperparameter optimization via Optuna. The framework is designed around clear extension points: users define custom PDE losses and data loaders by subclassing two base classes, while the training orchestration is handled automatically. INR4torch is available under the MIT license at \url{https://github.com/PeterJackNaylor/INR4torch}.
+\end{abstract}
+
+\section{Introduction}
+
+Physics-Informed Neural Networks \citep{raissi2019physics} have emerged as a powerful paradigm for solving forward and inverse problems governed by partial differential equations. By embedding PDE residuals directly into the loss function, PINNs leverage the approximation capacity of neural networks while respecting known physical laws. A parallel development in deep learning---Implicit Neural Representations (INRs)---has shown that neural networks with carefully chosen activation functions can represent continuous signals with high fidelity \citep{sitzmann2020implicit, tancik2020fourier}. The intersection of these two fields is particularly promising: INR architectures are well-suited for learning smooth, continuous PDE solutions without grid-based discretization.
+
+Despite the growing interest in PINNs, practitioners face a fragmented landscape of implementations. Existing frameworks such as DeepXDE \citep{lu2021deepxde}, NVIDIA Modulus \citep{modulus2023}, and NeuralPDE.jl \citep{neuralpde2021} offer varying levels of abstraction and architecture support, but none provide a unified PyTorch interface spanning the full spectrum of modern INR architectures---including the recently proposed Kolmogorov--Arnold Networks (KANs) \citep{liu2024kan}---with integrated advanced training strategies.
+
+INR4torch addresses this gap by providing a modular, YAML-configurable framework where the choice of architecture, training strategy, and PDE formulation are cleanly separated. Researchers can define a new PDE problem by subclassing two Python classes and writing a configuration file, leaving the training loop, optimization, and evaluation to the framework.
+
+\section{Statement of Need}
+
+Researchers working with PINNs frequently need to (1)~experiment with different neural architectures to find the best representation for their PDE, (2)~apply advanced training strategies such as loss balancing and causal weighting, and (3)~conduct systematic hyperparameter searches. Implementing these from scratch for each project is time-consuming and error-prone.
+
+INR4torch is designed for computational scientists and machine learning researchers who want a production-ready PINN toolkit that is easy to extend with new PDE problems while providing access to state-of-the-art architectures and training techniques out of the box. The package is particularly suited for problems where continuous representations are advantageous, such as inverse problems, surrogate modeling, and data assimilation.
+
+\section{Software Architecture}
+
+INR4torch is organized around three core abstractions that separate data, model, and training concerns.
+
+\subsection{Data Layer: \texttt{DataPlaceholder}}
+
+The \texttt{DataPlaceholder} class provides the interface for data loading and normalization. Users subclass it and override the \texttt{setup\_data} method to define how raw point clouds are split into input coordinates and target values. The base class handles automatic normalization to $[-1, 1]$, batch iteration, and optional GPU transfer.
+
+\subsection{Model Layer: \texttt{INR}}
+
+The \texttt{INR} class serves as a unified factory for all supported architectures. Given a model name and hyperparameters, it constructs the appropriate network. Five architectures are currently supported:
+
+\begin{itemize}
+    \item \textbf{SIREN} \citep{sitzmann2020implicit}: Sinusoidal activation functions with principled weight initialization, well-suited for representing signals with fine spatial detail.
+    \item \textbf{Random Fourier Features (RFF)} \citep{tancik2020fourier}: Fixed random projections that map low-dimensional inputs into a high-frequency feature space before processing by a standard MLP.
+    \item \textbf{WIRES} \citep{saragadam2023wire}: Complex-valued Gabor wavelet activations that provide localized frequency representations, effective for signals with spatially varying frequency content.
+    \item \textbf{Multiplicative Filter Networks (MFN)} \citep{fathony2021multiplicative}: Learnable Gabor filters that modulate hidden features at each layer using the original input, enabling progressive frequency refinement.
+    \item \textbf{Kolmogorov--Arnold Networks (KAN)} \citep{liu2024kan}: B-spline--based learnable activation functions on each network edge, replacing fixed activations with data-adaptive basis expansions.
+\end{itemize}
+
+All architectures expose the same forward interface, allowing users to swap models by changing a single configuration parameter. Optional skip connections and modified MLP variants are also supported.
+
+\subsection{Training Layer: \texttt{DensityEstimator}}
+
+The \texttt{DensityEstimator} class orchestrates the training loop and serves as the primary extension point for PDE-specific logic. Users subclass it and define named loss methods (e.g., \texttt{pde}, \texttt{periodicity}, \texttt{spatial\_gradient}) that compute residuals at collocation points sampled within the domain. The base class provides:
+
+\begin{itemize}
+    \item \textbf{Self-adapting loss balancing}: Dynamically adjusts the relative weight of each loss term based on gradient norms, following the approach of \citet{mcclenny2020self}. An exponential moving average with configurable decay smooths weight updates.
+    \item \textbf{ReLoBRaLo}: An alternative balancing scheme based on relative loss ratios with random lookback \citep{bischof2021multi}.
+    \item \textbf{Temporal causality weighting}: For time-dependent PDEs, the temporal domain is partitioned into bins, and exponential decay weights enforce that the network satisfies the PDE at earlier times before later times \citep{wang2024respecting}.
+    \item \textbf{Mixed-precision training}: Automatic FP16/BF16 computation with gradient scaling for memory efficiency on modern GPUs.
+    \item \textbf{Learning rate scheduling}: Supports step decay and cosine annealing with warm restarts.
+    \item \textbf{Early stopping}: Monitors validation loss and halts training when improvement stalls.
+\end{itemize}
+
+\subsection{Differential Operators}
+
+INR4torch provides a set of differential operator utilities built on PyTorch's automatic differentiation. These include \texttt{gradient}, \texttt{hessian}, \texttt{laplace}, \texttt{divergence}, and \texttt{jacobian}, all supporting higher-order derivatives. Users call these within their PDE loss methods to compute residuals symbolically.
+
+\subsection{Hyperparameter Optimization}
+
+The package integrates with Optuna \citep{akiba2019optuna} for automated hyperparameter search. Users define a search space and the framework handles trial management, pruning of unpromising runs, and result aggregation. The YAML configuration system ensures that all hyperparameters---architectural, training, and optimization---are tracked and reproducible.
+
+\section{Comparison with Existing Frameworks}
+
+Table~\ref{tab:comparison} compares INR4torch with three widely used PINN frameworks across key features.
+
+\begin{table}[ht]
+\centering
+\caption{Feature comparison of PINN frameworks. \checkmark\ indicates full support, $\sim$ partial support, and --- no support.}
+\label{tab:comparison}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Feature & INR4torch & DeepXDE & Modulus & NeuralPDE.jl \\
+\midrule
+Backend & PyTorch & Multi & PyTorch & Julia \\
+SIREN / RFF & \checkmark & $\sim$ & \checkmark & --- \\
+WIRES / MFN & \checkmark & --- & --- & --- \\
+KAN support & \checkmark & --- & --- & --- \\
+Self-adapting loss balancing & \checkmark & --- & \checkmark & --- \\
+Temporal causality & \checkmark & --- & $\sim$ & --- \\
+Mixed-precision training & \checkmark & --- & \checkmark & --- \\
+Optuna integration & \checkmark & --- & --- & --- \\
+YAML configuration & \checkmark & --- & \checkmark & --- \\
+Language & Python & Python & Python & Julia \\
+License & MIT & Apache-2.0 & Apache-2.0 & MIT \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DeepXDE \citep{lu2021deepxde} provides broad PDE support across multiple backends (TensorFlow, PyTorch, JAX) with an emphasis on ease of use for standard problems. However, it does not natively support the full range of INR architectures or advanced training strategies such as temporal causality weighting. NVIDIA Modulus \citep{modulus2023} offers industrial-scale capabilities with multi-GPU support but is tightly coupled to NVIDIA's ecosystem and does not support KAN or wavelet-based architectures. NeuralPDE.jl \citep{neuralpde2021} leverages Julia's scientific computing strengths and symbolic PDE specification but targets a different language ecosystem. INR4torch occupies a distinct niche: a lightweight, pure-PyTorch framework focused on INR architectures with integrated modern training strategies and hyperparameter optimization.
+
+\section{Example Usage}
+
+Defining a new PDE problem in INR4torch requires two subclasses. The following snippet illustrates solving the 1D advection equation $\partial_t u + c \, \partial_x u = 0$:
+
+\begin{lstlisting}
+import pinns
+
+class AdvectionData(pinns.DataPlaceholder):
+    def setup_data(self, pc):
+        return pc[:, :2], pc[:, 2:3]  # (t, x) -> u
+
+class AdvectionPDE(pinns.DensityEstimator):
+    def pde(self, z, z_hat, weight):
+        bs = self.hp.losses["pde"]["bs"]
+        x = pinns.gen_uniform(bs, self.device)
+        t = pinns.gen_uniform(bs, self.device, start=0, end=1)
+        x.requires_grad_(True)
+        t.requires_grad_(True)
+        u = self.model(x, t)
+        du_dt = pinns.gradient(u, t)
+        du_dx = pinns.gradient(u, x)
+        residue = du_dt + du_dx
+        return residue
+
+def data_fn(hp, gpu=False):
+    return AdvectionData(train), AdvectionData(test)
+
+model, hp = pinns.train(hp, AdvectionPDE, data_fn, pinns.INR, gpu=True)
+\end{lstlisting}
+
+Switching from RFF to KAN requires only changing \texttt{model.name: KAN} in the YAML configuration, with no modifications to the PDE or data code.
+
+\section{Testing and Quality Assurance}
+
+INR4torch includes a comprehensive test suite with over 40 unit and integration tests covering all modules: model architectures, differential operators, loss functions, normalization, training configuration, and the full training loop. Tests verify correctness of gradients against analytical solutions and check edge cases including NaN handling and early stopping behavior. The package uses continuous integration and supports Python versions 3.8 through 3.12.
+
+\section{Conclusion}
+
+INR4torch provides a modular, extensible framework for physics-informed learning with implicit neural representations. Its unified architecture interface, advanced training strategies, and clean extension points lower the barrier to experimenting with modern INR architectures for PDE-constrained problems. The package is available at \url{https://github.com/PeterJackNaylor/INR4torch} under the MIT license.
+
+\section*{Acknowledgments}
+
+% Add acknowledgments here.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

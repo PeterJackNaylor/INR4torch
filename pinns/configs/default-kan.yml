@@ -1,0 +1,111 @@
+#training
+max_iters: 20000 #00 #180 #00
+normalise_targets: True
+test_frequency: 500 # 1000
+save_model: True
+hard_periodicity: True
+c: 80
+ignore_nan: True
+
+#Models
+model:
+  name: KAN #or RFF/SIREN/WIRES/MFN
+  hidden_nlayers: 1
+  hidden_width: 16
+  scale: 1 #for SIREN: 30
+  skip: False
+  ## RFF specific
+  mapping_size: 256
+  activation: tanh
+  modified_mlp: False #True # if you have a separate encoder for the spatial and temporal inputs.
+  linear: HE # RWF # HE # Glorot # RWF Glorot does not work with SIREN
+  # RWF Specific
+  mean: 1
+  std: 0.1
+  # WIRES Specific
+  omega0: 10
+  sigma0: 40
+  trainable: True
+
+
+# Lambda values in the loss
+validation_loss: mse
+losses:
+  mse:
+    report: True
+    bs: 64
+    loss_balancing: True #whether to be included in loss balancing
+    ignore_nan: True
+  pde:
+    report: True
+    log: True
+    lambda: 1.e-1
+    temporal_causality: True
+    bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+    method: pde
+    loss_balancing: True #whether to be included in loss balancing
+    penalty: L2
+  # periodicity:
+  #   report: False
+  #   lambda: 1.e-1
+  #   temporal_causality: True
+  #   bs: 8192 # 8192 # 16384 # 32768 # powers of 2 only
+  #   method: periodicity
+  # spatial_grad:
+  #   report: True
+  #   log: True
+  #   lambda: 1000000
+  #   temporal_causality: True
+  #   bs: 8192 # 8192 #16384 # 65536 #32768 # 8192 # √ # powers of 2 only
+  #   method: spatial_gradient
+  #   loss_balancing: False #whether to be included in loss balancing
+
+
+
+
+# learning schemes
+temporal_causality:
+  M: 32 # powers of 2 only
+  eps: 3.e-2
+  step: 1 #update
+
+
+# Loss balancing
+relobralo:
+  status: False
+  T: 1.
+  alpha: 0.999
+  rho: 0.5
+  step: 100
+
+self_adapting_loss_balancing:
+  status: True
+  alpha: 0.9
+  step: 1000 #1000 #update
+
+
+early_stopping:
+  status: False
+  ignore_first: 5
+  patience: 20
+  value: 0.0001
+
+# optimizers
+optimizer: AdamW #LBFGS #adam or LGBS
+lr: 1.e-3
+eps: 1.e-8 #adam precision
+clip_gradients: True
+
+learning_rate_decay:
+  status: True
+  step: 2000
+  gamma: 0.98 # 0.9
+
+cosine_annealing:
+  status: False
+  min_eta: 0
+  step: 500
+
+optuna:
+  patience: 10000
+  trials: 100
