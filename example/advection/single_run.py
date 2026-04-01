@@ -1,4 +1,5 @@
 import sys
+import os
 import torch
 import numpy as np
 import matplotlib.pylab as plt
@@ -11,7 +12,9 @@ from example_dataloader import return_dataset
 from example_pde_model import Advection
 from example_model import return_model_advection as model
 
-torch.set_float32_matmul_precision("high")
+os.makedirs("plots", exist_ok=True)
+torch.backends.cudnn.conv.fp32_precision = "tf32"
+torch.backends.cuda.matmul.fp32_precision = "tf32"
 if sys.argv[1] == "default":
     param_file = "../../pinns/configs/default-parameters.yml"
 elif sys.argv[1] == "kan":

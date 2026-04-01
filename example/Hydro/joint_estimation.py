@@ -10,7 +10,8 @@ from example_dataloader import return_dataset
 from example_pde_model import Hydro, conservation_residue
 from pinns.models import INR
 
-torch.set_float32_matmul_precision("high")
+torch.backends.cudnn.conv.fp32_precision = "tf32"
+torch.backends.cuda.matmul.fp32_precision = "tf32"
 model_hp = pinns.read_yaml("hydro.yml")
 gpu = torch.cuda.is_available()
 device = "cuda" if gpu else "cpu"
