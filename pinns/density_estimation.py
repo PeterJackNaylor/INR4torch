@@ -852,7 +852,7 @@ class DensityEstimator:
         gradient clipping, loss balancing, early stopping, and
         model checkpointing.
         """
-        scaler = torch.amp.GradScaler(self.device, enabled=self.use_amp)
+        scaler = torch.cuda.amp.GradScaler(self.device, enabled=self.use_amp)
         self.setup_optimizer()
         self.setup_scheduler()
         self.setup_losses()

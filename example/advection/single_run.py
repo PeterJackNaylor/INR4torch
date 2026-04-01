@@ -13,9 +13,9 @@ from example_model import return_model_advection as model
 
 torch.set_float32_matmul_precision("high")
 if sys.argv[1] == "default":
-    param_file = "../../pinn/configs/default-parameters.yml"
+    param_file = "../../pinns/configs/default-parameters.yml"
 elif sys.argv[1] == "kan":
-    param_file = "../../pinn/configs/default-kan.yml"
+    param_file = "../../pinns/configs/default-kan.yml"
 model_hp = pinns.read_yaml(param_file)
 c = model_hp.c
 real_u, real_t, real_x = get_dataset(c=c, n_t=200, n_x=128)
