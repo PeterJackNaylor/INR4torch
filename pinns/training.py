@@ -151,7 +151,11 @@ def train(
     )
     # model = torch.compile(model, backend="inductor")
     if gpu:
-        model = model.cuda()
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        model = model.to(device)
 
     NN = estimate_density_cl(train, test, model, hp, gpu, trial=trial)
     if initial_weights:

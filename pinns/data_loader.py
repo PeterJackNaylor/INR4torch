@@ -125,7 +125,10 @@ class DataPlaceholder(Dataset):
         """
         if gpu:
             dtype = torch.float16
-            device = "cuda"
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
         else:
             dtype = torch.bfloat16
             device = "cpu"

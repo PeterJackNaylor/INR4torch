@@ -282,7 +282,13 @@ class DensityEstimator:
 
         self.model = model
         self.hp = model_hp
-        self.device = "cuda" if gpu else "cpu"
+        if gpu:
+            if torch.cuda.is_available():
+                self.device = "cuda"
+            elif torch.backends.mps.is_available():
+                self.device = "mps"
+        else:
+            self.device = "cpu"
         self.trial = trial
         self.autocasting()
 
